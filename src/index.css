@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+button, [role="button"], a, select, label[for], input[type="checkbox"], input[type="radio"] {
+  cursor: pointer;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #fda4af; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #fb7185; }

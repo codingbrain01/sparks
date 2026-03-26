@@ -1,0 +1,114 @@
+import { useState, useEffect } from 'react'
+import './App.css'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import { NotificationsProvider } from './context/NotificationsContext'
+import { PresenceProvider } from './context/PresenceContext'
+import { MessageNotificationsProvider, useMessageNotifications } from './context/MessageNotificationsContext'
+import Sidebar from './components/Sidebar'
+import BottomNav, { type Tab } from './components/BottomNav'
+import HomePage from './components/HomePage'
+import ChatPage from './components/ChatPage'
+import ProfilePage from './components/ProfilePage'
+import AuthPage from './components/auth/AuthPage'
+import type { Profile } from './lib/types'
+
+function AppContent() {
+  const { user, loading } = useAuth()
+  const [activeTab, setActiveTab] = useState<Tab>('home')
+  const [chatTarget, setChatTarget] = useState<Profile | null>(null)
+  const { latestNotif, clearUnread, dismissNotif } = useMessageNotifications()
+
+  const openChat = (profile: Profile) => {
+    setChatTarget(profile)
+    setActiveTab('chat')
+  }
+
+  useEffect(() => {
+    if (activeTab === 'chat') clearUnread()
+  }, [activeTab])
+
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-linear-to-br from-rose-50 to-pink-50">
+        <div className="text-center">
+          <div className="text-5xl mb-4 select-none">💕</div>
+          <div className="w-8 h-8 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin mx-auto" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) return <AuthPage />
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden bg-linear-to-br from-rose-50 via-fuchsia-50/40 to-violet-50/30">
+
+      {/* Message toast notification */}
+      {latestNotif && activeTab !== 'chat' && (
+        <div
+          className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 cursor-pointer"
+          onClick={() => { setActiveTab('chat'); dismissNotif() }}
+        >
+          <div className="flex items-center gap-3 bg-gray-900/95 backdrop-blur-sm text-white px-4 py-3 rounded-2xl shadow-2xl max-w-xs w-max">
+            <div className="w-8 h-8 rounded-full bg-linear-to-br from-rose-500 to-pink-400 flex items-center justify-center text-xs font-bold shrink-0">
+              {latestNotif.senderName[0]}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold">{latestNotif.senderName}</p>
+              <p className="text-xs text-gray-300 truncate max-w-45">{latestNotif.content}</p>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); dismissNotif() }}
+              className="text-gray-400 hover:text-white ml-1 shrink-0 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar — tablet and desktop */}
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Content column */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <main className="flex-1 overflow-hidden">
+          {activeTab === 'home' && (
+            <div className="h-full overflow-y-auto">
+              <HomePage onStartChat={openChat} />
+            </div>
+          )}
+          {activeTab === 'chat' && (
+            <ChatPage chatTarget={chatTarget} onChatTargetConsumed={() => setChatTarget(null)} />
+          )}
+          {activeTab === 'profile' && (
+            <div className="h-full overflow-y-auto">
+              <ProfilePage onStartChat={openChat} />
+            </div>
+          )}
+        </main>
+
+        {/* Bottom nav — mobile only */}
+        <div className="md:hidden shrink-0">
+          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <NotificationsProvider>
+        <PresenceProvider>
+          <MessageNotificationsProvider>
+            <AppContent />
+          </MessageNotificationsProvider>
+        </PresenceProvider>
+      </NotificationsProvider>
+    </AuthProvider>
+  )
+}
