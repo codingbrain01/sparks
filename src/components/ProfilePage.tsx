@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import type { Gender, LookingFor, Post, Privacy, Profile } from '../lib/types'
+import type { Gender, LookingFor, Post, PostComment, Privacy, Profile } from '../lib/types'
+import Avatar from './Avatar'
 
 function genderGradient(gender?: Gender) {
   return gender === 'Man'
@@ -57,6 +58,33 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
   const [connections, setConnections] = useState<Profile[]>([])
   const [viewingProfile, setViewingProfile] = useState<Profile | null>(null)
 
+  // Photo upload
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
+  const uploadPhoto = async (file: File) => {
+    if (!profile) return
+    setUploadingPhoto(true)
+    const path = `${profile.id}/avatar`
+    const { error } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+      await supabase.from('profiles').update({ avatar_url: `${publicUrl}?t=${Date.now()}` }).eq('id', profile.id)
+      await refreshProfile()
+    }
+    setUploadingPhoto(false)
+  }
+
+  const removePhoto = async () => {
+    if (!profile?.avatar_url) return
+    setUploadingPhoto(true)
+    await supabase.storage.from('avatars').remove([`${profile.id}/avatar`])
+    await supabase.from('profiles').update({ avatar_url: null }).eq('id', profile.id)
+    await refreshProfile()
+    setUploadingPhoto(false)
+  }
+
   // Delete account
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
@@ -75,6 +103,13 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
   const [editContent, setEditContent] = useState('')
   const [editPrivacyId, setEditPrivacyId] = useState<number | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+
+  // Post detail modal
+  const [viewingPost, setViewingPost] = useState<Post | null>(null)
+  const [postComments, setPostComments] = useState<PostComment[]>([])
+  const [postCommentsLoading, setPostCommentsLoading] = useState(false)
+  const [newComment, setNewComment] = useState('')
+  const [addingComment, setAddingComment] = useState(false)
 
   const profileToDraft = (): Draft => ({
     username: profile?.username ?? '',
@@ -194,6 +229,37 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
     setDeleteConfirmId(null)
   }
 
+  const openPost = async (post: Post) => {
+    setViewingPost(post)
+    setPostCommentsLoading(true)
+    const { data } = await supabase
+      .from('post_comments')
+      .select('*, profiles!user_id(*)')
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: true })
+    setPostComments((data ?? []) as PostComment[])
+    setPostCommentsLoading(false)
+  }
+
+  const addComment = async () => {
+    if (!newComment.trim() || !viewingPost || !profile) return
+    setAddingComment(true)
+    const { data } = await supabase
+      .from('post_comments')
+      .insert({ post_id: viewingPost.id, user_id: profile.id, content: newComment.trim() })
+      .select('*, profiles!user_id(*)')
+      .single()
+    if (data) {
+      setPostComments((prev) => [...prev, data as PostComment])
+      setPosts((prev) => prev.map((p) =>
+        p.id === viewingPost.id ? { ...p, comment_count: p.comment_count + 1 } : p
+      ))
+      setViewingPost((prev) => prev ? { ...prev, comment_count: prev.comment_count + 1 } : prev)
+    }
+    setNewComment('')
+    setAddingComment(false)
+  }
+
   if (!profile) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -239,10 +305,34 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
 
         {/* Avatar */}
         <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
-          <div className="w-24 h-24 lg:w-28 lg:h-28 rounded-full border-4 border-white shadow-xl overflow-hidden">
-            <div className={`w-full h-full bg-linear-to-br ${genderGradientLight(profile.gender)} flex items-center justify-center text-white text-3xl font-bold`}>
-              {profile.first_name[0]}{profile.last_name[0]}
+          <div className="relative">
+            <div className="w-24 h-24 lg:w-28 lg:h-28 rounded-full border-4 border-white shadow-xl overflow-hidden">
+              <Avatar
+                firstName={profile.first_name}
+                lastName={profile.last_name}
+                gender={profile.gender}
+                avatarUrl={profile.avatar_url}
+                className="w-full h-full rounded-full"
+                textClassName="text-3xl font-bold"
+              />
             </div>
+            {/* Camera button */}
+            <label className="absolute -bottom-0.5 -right-0.5 w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center cursor-pointer hover:bg-rose-50 transition-colors border border-rose-100">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = '' }}
+              />
+              {uploadingPhoto ? (
+                <div className="w-4 h-4 border-2 border-rose-200 border-t-rose-500 rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              )}
+            </label>
           </div>
         </div>
       </div>
@@ -257,6 +347,40 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
             {/* Personal info */}
             <div className="bg-white rounded-2xl p-4 lg:p-6 shadow-sm border border-rose-100/60 space-y-4">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Personal Info</p>
+
+              {/* Photo management */}
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-rose-100 shrink-0">
+                  <Avatar
+                    firstName={profile.first_name}
+                    lastName={profile.last_name}
+                    gender={profile.gender}
+                    avatarUrl={profile.avatar_url}
+                    className="w-full h-full rounded-full"
+                    textClassName="text-base font-bold"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="cursor-pointer text-xs font-semibold text-rose-500 hover:text-rose-600 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = '' }}
+                    />
+                    {uploadingPhoto ? 'Uploading…' : profile.avatar_url ? 'Change photo' : 'Upload photo'}
+                  </label>
+                  {profile.avatar_url && !uploadingPhoto && (
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors text-left"
+                    >
+                      Remove photo
+                    </button>
+                  )}
+                </div>
+              </div>
 
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">Username</label>
@@ -470,9 +594,14 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
                       onClick={() => setViewingProfile(conn)}
                       className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-gray-50 transition-colors text-center"
                     >
-                      <div className={`w-12 h-12 rounded-full bg-linear-to-br ${genderGradient(conn.gender)} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
-                        {conn.first_name[0]}{conn.last_name[0]}
-                      </div>
+                      <Avatar
+                        firstName={conn.first_name}
+                        lastName={conn.last_name}
+                        gender={conn.gender}
+                        avatarUrl={conn.avatar_url}
+                        className="w-12 h-12 rounded-full shrink-0"
+                        textClassName="text-sm font-bold"
+                      />
                       <div className="min-w-0 w-full">
                         <p className="text-sm font-semibold text-gray-900 truncate">{conn.first_name} {conn.last_name}</p>
                         <p className="text-xs text-gray-400 truncate">@{conn.username}</p>
@@ -502,7 +631,11 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
               ) : (
                 <div className="divide-y divide-gray-100">
                   {posts.map((post) => (
-                    <div key={post.id} className="px-4 lg:px-6 py-4">
+                    <div
+                      key={post.id}
+                      onClick={() => editingPostId !== post.id && openPost(post)}
+                      className="px-4 lg:px-6 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
 
                       {/* Post header */}
                       <div className="flex items-center justify-between mb-2">
@@ -511,7 +644,7 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
                           <span>{timeAgo(post.created_at)}</span>
                         </div>
                         {/* Three-dot menu */}
-                        <div className="relative">
+                        <div className="relative" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => setMenuOpenId(menuOpenId === post.id ? null : post.id)}
                             className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
@@ -541,7 +674,7 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
 
                       {/* Content / edit inline */}
                       {editingPostId === post.id ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
                           <textarea
                             value={editContent}
                             onChange={(e) => setEditContent(e.target.value)}
@@ -560,12 +693,14 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{post.content}</p>
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                          {post.content}
+                        </p>
                       )}
 
                       {/* Privacy picker */}
                       {editPrivacyId === post.id && (
-                        <div className="mt-2 flex gap-2">
+                        <div className="mt-2 flex gap-2" onClick={(e) => e.stopPropagation()}>
                           {(['public', 'friends', 'private'] as Privacy[]).map((p) => (
                             <button
                               key={p}
@@ -584,7 +719,7 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
 
                       {/* Delete confirm */}
                       {deleteConfirmId === post.id && (
-                        <div className="mt-2 flex gap-2 items-center bg-rose-50 rounded-xl px-3 py-2">
+                        <div className="mt-2 flex gap-2 items-center bg-rose-50 rounded-xl px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <p className="text-xs text-rose-600 flex-1">Delete this post?</p>
                           <button
                             onClick={() => setDeleteConfirmId(null)}
@@ -600,7 +735,7 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
                       {/* Stats */}
                       <div className="flex gap-4 mt-3 text-xs text-gray-400">
                         <span>❤️ {post.like_count}</span>
-                        <span>💬 {post.comment_count}</span>
+                        <span>💬 {post.comment_count} comment{post.comment_count !== 1 ? 's' : ''}</span>
                       </div>
                     </div>
                   ))}
@@ -621,6 +756,99 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
         onClose={() => setViewingProfile(null)}
         onMessage={onStartChat ? () => { onStartChat(viewingProfile); setViewingProfile(null) } : undefined}
       />
+    )}
+
+    {/* ── Post detail modal ── */}
+    {viewingPost && (
+      <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setViewingPost(null); setNewComment('') }} />
+        <div className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 pt-5 pb-4 shrink-0">
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span>{PRIVACY_ICON[viewingPost.privacy as Privacy ?? 'public']}</span>
+              <span>{timeAgo(viewingPost.created_at)}</span>
+            </div>
+            <button
+              onClick={() => { setViewingPost(null); setNewComment('') }}
+              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Post content */}
+          <div className="px-5 pb-4 shrink-0">
+            <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-line">{viewingPost.content}</p>
+            <div className="flex gap-4 mt-3 text-xs text-gray-400">
+              <span>❤️ {viewingPost.like_count}</span>
+              <span>💬 {viewingPost.comment_count}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 mx-5 shrink-0" />
+
+          {/* Comments */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            {postCommentsLoading ? (
+              <div className="flex justify-center py-6">
+                <div className="w-6 h-6 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin" />
+              </div>
+            ) : postComments.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">No comments yet — be the first!</p>
+            ) : (
+              postComments.map((c) => (
+                <div key={c.id} className="flex items-start gap-2.5">
+                  <Avatar
+                    firstName={c.profiles.first_name}
+                    lastName={c.profiles.last_name}
+                    gender={c.profiles.gender}
+                    avatarUrl={c.profiles.avatar_url}
+                    className="w-8 h-8 rounded-full shrink-0 mt-0.5"
+                    textClassName="text-xs font-bold"
+                  />
+                  <div className="flex-1 bg-gray-50 rounded-2xl px-3 py-2">
+                    <p className="text-xs font-semibold text-gray-800">{c.profiles.first_name} {c.profiles.last_name}</p>
+                    <p className="text-sm text-gray-700 mt-0.5 leading-relaxed">{c.content}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Add comment */}
+          <div className="border-t border-gray-100 px-4 py-3 shrink-0 flex items-center gap-2">
+            <Avatar
+              firstName={profile.first_name}
+              lastName={profile.last_name}
+              gender={profile.gender}
+              avatarUrl={profile.avatar_url}
+              className="w-8 h-8 rounded-full shrink-0"
+              textClassName="text-xs font-bold"
+            />
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && addComment()}
+              placeholder="Add a comment…"
+              className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-rose-300 transition-shadow"
+            />
+            <button
+              onClick={addComment}
+              disabled={!newComment.trim() || addingComment}
+              className="w-8 h-8 rounded-full bg-linear-to-r from-rose-500 to-pink-400 flex items-center justify-center text-white disabled:opacity-40 shrink-0 transition-opacity"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
     )}
 
     {showDeleteAccount && (

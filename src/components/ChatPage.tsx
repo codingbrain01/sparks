@@ -5,14 +5,7 @@ import { usePresence } from '../context/PresenceContext'
 import type { Message, ConversationWithPartner, Profile } from '../lib/types'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import StatusDot, { STATUS_META } from './StatusDot'
-
-function avatarGradient(gender?: string) {
-  return gender === 'Man' ? 'from-blue-500 to-indigo-400' : 'from-rose-500 to-pink-400'
-}
-
-function getInitials(p: Profile) {
-  return `${p.first_name[0] ?? ''}${p.last_name[0] ?? ''}`.toUpperCase()
-}
+import Avatar from './Avatar'
 
 // ─── Call overlay ──────────────────────────────────────────────────────────
 function CallOverlay({
@@ -28,9 +21,14 @@ function CallOverlay({
   return (
     <div className="fixed inset-0 z-60 bg-gray-900 flex flex-col items-center justify-between py-16 px-6">
       <div className="flex flex-col items-center gap-4 mt-8">
-        <div className={`w-24 h-24 rounded-full bg-linear-to-br ${avatarGradient(person.gender)} flex items-center justify-center text-white text-3xl font-bold shadow-lg`}>
-          {getInitials(person)}
-        </div>
+        <Avatar
+          firstName={person.first_name}
+          lastName={person.last_name}
+          gender={person.gender}
+          avatarUrl={person.avatar_url}
+          className="w-24 h-24 rounded-full shadow-lg"
+          textClassName="text-3xl font-bold"
+        />
         <div className="text-center">
           <p className="text-white text-xl font-bold">{person.first_name} {person.last_name}</p>
           <p className="text-gray-400 text-sm mt-1">{type === 'video' ? 'Video calling…' : 'Calling…'}</p>
@@ -95,8 +93,11 @@ export default function ChatPage({
   const [message, setMessage] = useState('')
   const [callType, setCallType] = useState<'audio' | 'video' | null>(null)
   const [loadingConvs, setLoadingConvs] = useState(true)
+  const [partnerTyping, setPartnerTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const typingChannelRef = useRef<RealtimeChannel | null>(null)
+  const partnerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Delete conversation
   const [deleteConv, setDeleteConv] = useState<ConversationWithPartner | null>(null)
@@ -217,6 +218,34 @@ export default function ChatPage({
 
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current) }
   }, [activeConv])
+
+  // ── Typing indicator ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (typingChannelRef.current) supabase.removeChannel(typingChannelRef.current)
+    setPartnerTyping(false)
+    if (!activeConv || !user) return
+
+    typingChannelRef.current = supabase
+      .channel(`typing-${activeConv.id}`)
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload.user_id === user.id) return
+        setPartnerTyping(true)
+        if (partnerTypingTimerRef.current) clearTimeout(partnerTypingTimerRef.current)
+        partnerTypingTimerRef.current = setTimeout(() => setPartnerTyping(false), 4000)
+      })
+      .subscribe()
+
+    return () => { if (typingChannelRef.current) supabase.removeChannel(typingChannelRef.current) }
+  }, [activeConv?.id, user])
+
+  const broadcastTyping = () => {
+    if (!activeConv || !user) return
+    typingChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { user_id: user.id },
+    })
+  }
 
   // ── Send message ─────────────────────────────────────────────────────────
   const sendMessage = async () => {
@@ -461,9 +490,14 @@ export default function ChatPage({
                       onClick={() => { startConversation(u); setShowCompose(false) }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
                     >
-                      <div className={`w-9 h-9 rounded-full bg-linear-to-br ${avatarGradient(u.gender)} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-                        {getInitials(u)}
-                      </div>
+                      <Avatar
+                        firstName={u.first_name}
+                        lastName={u.last_name}
+                        gender={u.gender}
+                        avatarUrl={u.avatar_url}
+                        className="w-9 h-9 rounded-full shrink-0"
+                        textClassName="text-xs font-bold"
+                      />
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{u.first_name} {u.last_name}</p>
                         <p className="text-xs text-gray-400 truncate">@{u.username}</p>
@@ -487,8 +521,15 @@ export default function ChatPage({
                     onClick={() => startConversation(u)}
                     className="flex flex-col items-center gap-1 shrink-0"
                   >
-                    <div className={`w-12 h-12 rounded-full bg-linear-to-br ${avatarGradient(u.gender)} flex items-center justify-center text-white font-bold text-sm relative`}>
-                      {getInitials(u)}
+                    <div className="relative">
+                      <Avatar
+                        firstName={u.first_name}
+                        lastName={u.last_name}
+                        gender={u.gender}
+                        avatarUrl={u.avatar_url}
+                        className="w-12 h-12 rounded-full"
+                        textClassName="font-bold text-sm"
+                      />
                       <span className="absolute bottom-0 right-0">
                         <StatusDot status={onlineMap[u.id] ?? 'online'} size="sm" />
                       </span>
@@ -525,8 +566,15 @@ export default function ChatPage({
                         : 'hover:bg-rose-50/40'
                     }`}
                   >
-                    <div className={`w-11 h-11 lg:w-12 lg:h-12 rounded-full bg-linear-to-br ${avatarGradient(conv.partner.gender)} flex items-center justify-center text-white font-bold relative shrink-0`}>
-                      {getInitials(conv.partner)}
+                    <div className="relative shrink-0">
+                      <Avatar
+                        firstName={conv.partner.first_name}
+                        lastName={conv.partner.last_name}
+                        gender={conv.partner.gender}
+                        avatarUrl={conv.partner.avatar_url}
+                        className="w-11 h-11 lg:w-12 lg:h-12 rounded-full"
+                        textClassName="font-bold text-sm"
+                      />
                       {onlineMap[conv.partner.id] && (
                         <span className="absolute bottom-0 right-0">
                           <StatusDot status={onlineMap[conv.partner.id]} size="sm" />
@@ -584,8 +632,15 @@ export default function ChatPage({
                   </svg>
                 </button>
 
-                <div className={`w-10 h-10 lg:w-11 lg:h-11 rounded-full bg-linear-to-br ${avatarGradient(activeConv.partner.gender)} flex items-center justify-center text-white font-bold text-sm relative shrink-0`}>
-                  {getInitials(activeConv.partner)}
+                <div className="relative shrink-0">
+                  <Avatar
+                    firstName={activeConv.partner.first_name}
+                    lastName={activeConv.partner.last_name}
+                    gender={activeConv.partner.gender}
+                    avatarUrl={activeConv.partner.avatar_url}
+                    className="w-10 h-10 lg:w-11 lg:h-11 rounded-full"
+                    textClassName="font-bold text-sm"
+                  />
                   {onlineMap[activeConv.partner.id] && (
                     <span className="absolute bottom-0 right-0">
                       <StatusDot status={onlineMap[activeConv.partner.id]} size="sm" />
@@ -636,9 +691,14 @@ export default function ChatPage({
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
                     {msg.sender_id !== user?.id && (
-                      <div className={`w-7 h-7 rounded-full bg-linear-to-br ${avatarGradient(activeConv.partner.gender)} flex items-center justify-center text-white text-xs font-bold mr-2 shrink-0 self-end`}>
-                        {activeConv.partner.first_name[0]}
-                      </div>
+                      <Avatar
+                        firstName={activeConv.partner.first_name}
+                        lastName={activeConv.partner.last_name}
+                        gender={activeConv.partner.gender}
+                        avatarUrl={activeConv.partner.avatar_url}
+                        className="w-7 h-7 rounded-full mr-2 shrink-0 self-end"
+                        textClassName="text-xs font-bold"
+                      />
                     )}
                     <div className={`max-w-[72%] lg:max-w-[60%] px-4 py-2.5 rounded-2xl ${
                       msg.sender_id === user?.id
@@ -652,6 +712,26 @@ export default function ChatPage({
                     </div>
                   </div>
                 ))}
+                {/* Typing indicator */}
+                {partnerTyping && (
+                  <div className="flex justify-start items-end gap-2">
+                    <Avatar
+                      firstName={activeConv.partner.first_name}
+                      lastName={activeConv.partner.last_name}
+                      gender={activeConv.partner.gender}
+                      avatarUrl={activeConv.partner.avatar_url}
+                      className="w-7 h-7 rounded-full shrink-0"
+                      textClassName="text-xs font-bold"
+                    />
+                    <div className="bg-white rounded-2xl rounded-bl-sm shadow-sm px-4 py-3">
+                      <div className="flex gap-1 items-center h-4">
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -661,7 +741,7 @@ export default function ChatPage({
                   <input
                     type="text"
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    onChange={(e) => { setMessage(e.target.value); broadcastTyping() }}
                     onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                     placeholder="Type a message…"
                     className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-rose-300 transition-shadow"

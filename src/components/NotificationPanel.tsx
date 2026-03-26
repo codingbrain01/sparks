@@ -1,9 +1,5 @@
 import { useNotifications } from '../context/NotificationsContext'
-import type { Gender } from '../lib/types'
-
-function avatarGradient(gender?: Gender) {
-  return gender === 'Man' ? 'from-blue-500 to-indigo-400' : 'from-rose-500 to-pink-400'
-}
+import Avatar from './Avatar'
 
 interface Props {
   onClose: () => void
@@ -50,9 +46,14 @@ export default function NotificationPanel({ onClose }: Props) {
           <div className="divide-y divide-rose-50 max-h-96 overflow-y-auto">
             {requests.map((req) => (
               <div key={req.id} className="flex items-center gap-3 px-5 py-4 hover:bg-rose-50/40 transition-colors">
-                <div className={`w-11 h-11 rounded-full bg-linear-to-br ${avatarGradient(req.profiles.gender)} flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm`}>
-                  {req.profiles.first_name[0]}{req.profiles.last_name[0]}
-                </div>
+                <Avatar
+                  firstName={req.profiles.first_name}
+                  lastName={req.profiles.last_name}
+                  gender={req.profiles.gender}
+                  avatarUrl={req.profiles.avatar_url}
+                  className="w-11 h-11 rounded-full shrink-0 shadow-sm"
+                  textClassName="text-sm font-bold"
+                />
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">

@@ -5,10 +5,7 @@ import { useNotifications } from '../context/NotificationsContext'
 import type { Post, PostComment, Profile, ConnStatus, Privacy, Gender } from '../lib/types'
 import UserProfileModal from './UserProfileModal'
 import NotificationPanel from './NotificationPanel'
-
-function avatarGradient(gender?: Gender) {
-  return gender === 'Man' ? 'from-blue-500 to-indigo-400' : 'from-rose-500 to-pink-400'
-}
+import Avatar from './Avatar'
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -301,9 +298,16 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
                 <div className="flex items-center gap-3 mb-3 pl-2">
                   <button
                     onClick={() => !isOwn && setViewingProfile(post.profiles)}
-                    className={`w-11 h-11 lg:w-12 lg:h-12 rounded-full bg-linear-to-br ${avatarGradient(gender)} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md ${!isOwn ? 'cursor-pointer hover:opacity-90 hover:scale-105 transition-all' : 'cursor-default'}`}
+                    className={`shrink-0 ${!isOwn ? 'cursor-pointer hover:opacity-90 hover:scale-105 transition-all' : 'cursor-default'}`}
                   >
-                    {post.profiles.first_name[0]}{post.profiles.last_name[0]}
+                    <Avatar
+                      firstName={post.profiles.first_name}
+                      lastName={post.profiles.last_name}
+                      gender={post.profiles.gender}
+                      avatarUrl={post.profiles.avatar_url}
+                      className="w-11 h-11 lg:w-12 lg:h-12 rounded-full shadow-md"
+                      textClassName="font-bold text-sm"
+                    />
                   </button>
 
                   <div className="flex-1 min-w-0">
@@ -505,9 +509,14 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
                       <div className="space-y-2 mb-3">
                         {comments.map((c) => (
                           <div key={c.id} className="flex items-start gap-2">
-                            <div className={`w-7 h-7 rounded-full bg-linear-to-br ${avatarGradient(c.profiles.gender)} flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5 shadow-sm`}>
-                              {c.profiles.first_name[0]}{c.profiles.last_name[0]}
-                            </div>
+                            <Avatar
+                              firstName={c.profiles.first_name}
+                              lastName={c.profiles.last_name}
+                              gender={c.profiles.gender}
+                              avatarUrl={c.profiles.avatar_url}
+                              className="w-7 h-7 rounded-full shrink-0 mt-0.5 shadow-sm"
+                              textClassName="text-xs font-bold"
+                            />
                             <div className="flex-1 min-w-0 bg-rose-50/60 rounded-xl px-3 py-2">
                               <span className="text-xs font-semibold text-gray-700 mr-1">
                                 {c.profiles.first_name} {c.profiles.last_name}

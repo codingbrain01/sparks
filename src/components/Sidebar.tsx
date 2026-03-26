@@ -5,12 +5,9 @@ import { usePresence } from '../context/PresenceContext'
 import { useMessageNotifications } from '../context/MessageNotificationsContext'
 import NotificationPanel from './NotificationPanel'
 import StatusDot, { STATUS_META } from './StatusDot'
+import Avatar from './Avatar'
 import type { Tab } from './BottomNav'
-import type { UserStatus, Gender } from '../lib/types'
-
-function genderGradient(gender?: Gender) {
-  return gender === 'Man' ? 'from-blue-500 to-indigo-400' : 'from-rose-500 to-pink-400'
-}
+import type { UserStatus } from '../lib/types'
 
 interface Props {
   activeTab: Tab
@@ -24,6 +21,15 @@ const navItems: { id: Tab; label: string; icon: (active: boolean) => JSX.Element
     icon: (active) => (
       <svg className="w-5 h-5 shrink-0" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'explore',
+    label: 'Explore',
+    icon: (active) => (
+      <svg className="w-5 h-5 shrink-0" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
       </svg>
     ),
   },
@@ -137,9 +143,18 @@ export default function Sidebar({ activeTab, onTabChange }: Props) {
 
           {/* Avatar with status dot */}
           <div className="relative shrink-0">
-            <div className={`w-9 h-9 rounded-full bg-linear-to-br ${genderGradient(profile?.gender)} flex items-center justify-center text-white text-sm font-bold shadow-sm`}>
-              {profile ? `${profile.first_name[0] ?? ''}${profile.last_name[0] ?? ''}` : '?'}
-            </div>
+            {profile ? (
+              <Avatar
+                firstName={profile.first_name}
+                lastName={profile.last_name}
+                gender={profile.gender}
+                avatarUrl={profile.avatar_url}
+                className="w-9 h-9 rounded-full shadow-sm"
+                textClassName="text-sm font-bold"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-sm font-bold">?</div>
+            )}
             <span className="absolute -bottom-0.5 -right-0.5">
               <StatusDot status={myStatus} size="sm" />
             </span>

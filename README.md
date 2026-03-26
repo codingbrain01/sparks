@@ -6,17 +6,41 @@
 
 ## Features
 
-- **Smart Matching** — Send and receive connection requests; manage your connections list
-- **Real-time Messaging** — Instant chat powered by Supabase Realtime; message notifications with unread badges
-- **Live Presence** — Online/Away/Busy/DND status that updates across all sessions instantly
-- **3-Step Signup** — Guided onboarding flow: account → profile → preferences
-- **Social Feed** — Home feed with posts, likes, and comments from your connections
-- **Notifications** — Connection request alerts with accept/decline actions
-- **Delete Conversations** — Delete for yourself or delete for both parties
-- **Profile Management** — Edit your profile, manage connections, and delete your account
+### Matching & Discovery
+- **Explore page** — Browse profiles you haven't connected with yet; filter by gender, preference, and age range; live search by name or username
+- **Connection requests** — Send, cancel, accept, or decline requests; real-time notification badges
+- **Smart filtering** — Explore page excludes already-connected and pending profiles automatically
+
+### Messaging
+- **Real-time chat** — Instant messaging powered by Supabase Realtime
+- **Typing indicators** — Live "..." bubble when the other person is typing, auto-hides after 4 seconds of silence
+- **Message notifications** — Badge on the Chat tab + toast popup when a message arrives; disappears automatically when on the chat tab
+- **Unread count per conversation** — Badge counts unique conversations with unread messages, not individual messages
+- **Delete conversations** — Delete for yourself only, or delete for both parties
+
+### Profiles
+- **Profile photos** — Upload, change, or remove your avatar; photo appears everywhere across the app (chat, explore, feed, notifications)
+- **3-step signup** — Guided onboarding: account → profile → preferences
+- **Edit profile** — Update name, username, age, bio, looking for, and hobbies
+- **My Posts** — View, edit, delete your posts; click any post to open a detail view with full comments and comment input
+- **Connections list** — View and message your connections from your profile
+- **Delete account** — Permanently removes your profile, posts, connections, and messages
+
+### Presence
+- **Live status** — Online, Away, Busy, DND, Invisible; shown across chat, explore, and profiles
+- **Auto-away** — Automatically switches to Away when you switch tabs or minimize the window; restores your status when you return
+- **Multi-device sync** — Status changes on one device instantly propagate to all other logged-in devices via DB listener
+- **Multi-device conflict resolution** — Intentional statuses (Busy, DND) take priority over auto-away across devices
+
+### Social Feed
+- **Home feed** — Posts from your connections with likes and comments
 - **Gender-themed UI** — Blue accents for men, pink for women throughout the app
-- **Responsive Design** — Full mobile support with bottom nav; desktop sidebar with collapsible states
-- **Cross-platform Desktop** — Ships as a native Electron app for Windows, macOS, and Linux
+- **Privacy controls** — Set posts to Public, Friends only, or Private
+
+### Platform
+- **Responsive design** — Full mobile support with bottom nav; collapsible desktop sidebar
+- **Cross-platform desktop** — Ships as a native Electron app for Windows, macOS, and Linux
+- **Frosted glass UI** — Rose/pink/fuchsia romantic theme with backdrop blur throughout
 
 ---
 
@@ -27,7 +51,7 @@
 | Frontend | React 19 + TypeScript |
 | Styling | Tailwind CSS v4 |
 | Build | Vite 8 |
-| Backend | Supabase (PostgreSQL + Realtime + Auth + RLS) |
+| Backend | Supabase (PostgreSQL + Realtime + Auth + Storage + RLS) |
 | Desktop | Electron 41 |
 
 ---
@@ -37,7 +61,9 @@
 ### Prerequisites
 
 - Node.js 18+
-- A [Supabase](https://supabase.com) project
+- A [Supabase](https://supabase.com) project with:
+  - `profiles`, `connections`, `conversations`, `conversation_participants`, `messages`, `posts`, `post_comments`, `post_likes` tables
+  - A public `avatars` storage bucket with RLS policies for authenticated uploads
 
 ### Setup
 
@@ -76,10 +102,20 @@ npm run electron:build
 
 ```
 src/
-├── components/       # UI components (ChatPage, HomePage, ProfilePage, ...)
-├── context/          # React contexts (Auth, Presence, Notifications, Messages)
+├── components/       # UI components
+│   ├── Avatar.tsx        # Shared avatar component (photo or initials fallback)
+│   ├── ChatPage.tsx      # Real-time messaging with typing indicators
+│   ├── ExplorePage.tsx   # Browse & filter profiles
+│   ├── HomePage.tsx      # Social feed
+│   ├── ProfilePage.tsx   # Profile view, edit, posts, connections
+│   └── ...
+├── context/          # React contexts
+│   ├── AuthContext.tsx               # Auth + session
+│   ├── MessageNotificationsContext.tsx  # Message badge + toast
+│   ├── NotificationsContext.tsx      # Connection request notifications
+│   └── PresenceContext.tsx           # Live status + auto-away + multi-device sync
 ├── lib/              # Supabase client + shared types
-└── index.css         # Global styles
+└── index.css         # Global styles + custom scrollbar
 electron/             # Electron main process
 ```
 

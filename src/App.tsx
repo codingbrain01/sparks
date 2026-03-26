@@ -9,6 +9,7 @@ import BottomNav, { type Tab } from './components/BottomNav'
 import HomePage from './components/HomePage'
 import ChatPage from './components/ChatPage'
 import ProfilePage from './components/ProfilePage'
+import ExplorePage from './components/ExplorePage'
 import AuthPage from './components/auth/AuthPage'
 import type { Profile } from './lib/types'
 
@@ -78,6 +79,11 @@ function AppContent() {
           {activeTab === 'home' && (
             <div className="h-full overflow-y-auto">
               <HomePage onStartChat={openChat} />
+            </div>
+          )}
+          {activeTab === 'explore' && (
+            <div className="h-full overflow-y-auto">
+              <ExplorePage onStartChat={openChat} />
             </div>
           )}
           {activeTab === 'chat' && (

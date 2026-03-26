@@ -1,21 +1,18 @@
-import type { Profile, ConnStatus, Gender, UserStatus } from '../lib/types'
+import type { Profile, ConnStatus, UserStatus } from '../lib/types'
 import { usePresence } from '../context/PresenceContext'
 import StatusDot, { STATUS_META } from './StatusDot'
-
-function genderGradient(gender?: Gender) {
-  return gender === 'Man' ? 'from-blue-500 to-indigo-400' : 'from-rose-500 to-pink-400'
-}
+import Avatar from './Avatar'
 
 const CONNECT_LABEL: Record<ConnStatus, string> = {
   none: 'Connect',
-  pending_sent: 'Pending…',
+  pending_sent: 'Cancel Request',
   pending_received: 'Accept',
   accepted: '✓ Connected',
 }
 
 const CONNECT_STYLE: Record<ConnStatus, string> = {
   none: 'bg-linear-to-r from-rose-500 to-pink-400 text-white shadow-sm hover:shadow-md',
-  pending_sent: 'bg-gray-100 text-gray-400',
+  pending_sent: 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500',
   pending_received: 'bg-green-500 text-white shadow-sm hover:shadow-md',
   accepted: 'bg-green-50 text-green-600',
 }
@@ -37,10 +34,8 @@ interface Props {
 }
 
 export default function UserProfileModal({ profile, connStatus, onConnect, onClose, onMessage }: Props) {
-  const initials = `${profile.first_name[0] ?? ''}${profile.last_name[0] ?? ''}`.toUpperCase()
   const { onlineMap } = usePresence()
   const presenceStatus = onlineMap[profile.id]
-  const gradient = genderGradient(profile.gender)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
@@ -71,9 +66,14 @@ export default function UserProfileModal({ profile, connStatus, onConnect, onClo
 
           {/* Avatar + Name block */}
           <div className="flex flex-col items-center px-5 mb-5">
-            <div className={`w-24 h-24 rounded-full bg-linear-to-br ${gradient} flex items-center justify-center text-white text-3xl font-bold shadow-md mb-4`}>
-              {initials}
-            </div>
+            <Avatar
+              firstName={profile.first_name}
+              lastName={profile.last_name}
+              gender={profile.gender}
+              avatarUrl={profile.avatar_url}
+              className="w-24 h-24 rounded-full shadow-md mb-4"
+              textClassName="text-3xl font-bold"
+            />
             <h2 className="text-xl font-bold text-gray-900">{profile.first_name} {profile.last_name}</h2>
             <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
               <span className="text-sm text-gray-400">@{profile.username} · </span>
@@ -104,7 +104,7 @@ export default function UserProfileModal({ profile, connStatus, onConnect, onClo
             )}
             <button
               onClick={onConnect}
-              disabled={connStatus === 'accepted' || connStatus === 'pending_sent'}
+              disabled={connStatus === 'accepted'}
               className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:cursor-default ${CONNECT_STYLE[connStatus]}`}
             >
               {CONNECT_LABEL[connStatus]}
