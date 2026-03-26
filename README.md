@@ -40,9 +40,9 @@
 - **Privacy controls** — Set posts to Public, Friends only, or Private
 
 ### Platform
-- **URL routing** — Clean browser URLs (`/home`, `/chat`, `/profile`) via React Router
+- **URL routing** — Clean browser URLs (`/login`, `/home`, `/chat`, `/profile`, `/explore`) via React Router; protected routes redirect unauthenticated users to `/login`
 - **Responsive design** — Full mobile support with bottom nav; collapsible desktop sidebar
-- **Cross-platform desktop** — Ships as a native Electron app for Windows, macOS, and Linux
+- **Cross-platform desktop** — Ships as a native Electron app for Windows, macOS, and Linux; reload shortcuts blocked in production kiosk mode
 - **Frosted glass UI** — Rose/pink/fuchsia romantic theme with backdrop blur throughout
 
 ---

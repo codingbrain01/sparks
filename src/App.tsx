@@ -14,8 +14,36 @@ import ExplorePage from './components/ExplorePage'
 import AuthPage from './components/auth/AuthPage'
 import type { Profile } from './lib/types'
 
-function AppContent() {
+// ── Spinner shown while auth state loads ─────────────────────────────────────
+function LoadingScreen() {
+  return (
+    <div className="h-screen w-screen flex items-center justify-center bg-linear-to-br from-rose-50 to-pink-50">
+      <div className="text-center">
+        <div className="text-5xl mb-4 select-none">💕</div>
+        <div className="w-8 h-8 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin mx-auto" />
+      </div>
+    </div>
+  )
+}
+
+// ── Only accessible when NOT logged in ───────────────────────────────────────
+function GuestRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (user) return <Navigate to="/home" replace />
+  return <>{children}</>
+}
+
+// ── Only accessible when logged in ───────────────────────────────────────────
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!user) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+// ── Authenticated app shell (sidebar, bottom nav, toast) ─────────────────────
+function AppShell() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { latestNotif, clearUnread, dismissNotif } = useMessageNotifications()
@@ -24,23 +52,9 @@ function AppContent() {
     navigate('/chat', { state: { chatTarget: profile } })
   }
 
-  // Clear message badge when on chat route
   useEffect(() => {
     if (pathname === '/chat') clearUnread()
   }, [pathname])
-
-  if (loading) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-linear-to-br from-rose-50 to-pink-50">
-        <div className="text-center">
-          <div className="text-5xl mb-4 select-none">💕</div>
-          <div className="w-8 h-8 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin mx-auto" />
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) return <AuthPage />
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-linear-to-br from-rose-50 via-fuchsia-50/40 to-violet-50/30">
@@ -71,14 +85,11 @@ function AppContent() {
         </div>
       )}
 
-      {/* Sidebar — tablet and desktop */}
       <Sidebar />
 
-      {/* Content column */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-hidden">
           <Routes>
-            <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={
               <div className="h-full overflow-y-auto">
                 <HomePage onStartChat={openChat} />
@@ -99,12 +110,26 @@ function AppContent() {
           </Routes>
         </main>
 
-        {/* Bottom nav — mobile only */}
         <div className="md:hidden shrink-0">
           <BottomNav />
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Root router ───────────────────────────────────────────────────────────────
+function AppContent() {
+  return (
+    <Routes>
+      <Route path="/login" element={
+        <GuestRoute><AuthPage /></GuestRoute>
+      } />
+      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/*" element={
+        <ProtectedRoute><AppShell /></ProtectedRoute>
+      } />
+    </Routes>
   )
 }
 

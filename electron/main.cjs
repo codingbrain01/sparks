@@ -56,6 +56,18 @@ function createWindow() {
   if (!isDev) {
     win.webContents.on('context-menu', (e) => e.preventDefault())
   }
+
+  // Block reload shortcuts in production (Ctrl+R, F5, Ctrl+Shift+R)
+  // A stray reload on file:// would break BrowserRouter routing
+  if (!isDev) {
+    win.webContents.on('before-input-event', (event, input) => {
+      const isReload =
+        (input.key === 'r' && input.control) ||
+        (input.key === 'R' && input.control) ||
+        input.key === 'F5'
+      if (isReload) event.preventDefault()
+    })
+  }
 }
 
 app.whenReady().then(() => {
