@@ -1,73 +1,90 @@
-# React + TypeScript + Vite
+# 💕 Sparks
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> A modern, real-time dating & social app built with React 19, Supabase, and Tailwind CSS v4. Connect with people, spark conversations, and find your match.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Features
 
-## React Compiler
+- **Smart Matching** — Send and receive connection requests; manage your connections list
+- **Real-time Messaging** — Instant chat powered by Supabase Realtime; message notifications with unread badges
+- **Live Presence** — Online/Away/Busy/DND status that updates across all sessions instantly
+- **3-Step Signup** — Guided onboarding flow: account → profile → preferences
+- **Social Feed** — Home feed with posts, likes, and comments from your connections
+- **Notifications** — Connection request alerts with accept/decline actions
+- **Delete Conversations** — Delete for yourself or delete for both parties
+- **Profile Management** — Edit your profile, manage connections, and delete your account
+- **Gender-themed UI** — Blue accents for men, pink for women throughout the app
+- **Responsive Design** — Full mobile support with bottom nav; desktop sidebar with collapsible states
+- **Cross-platform Desktop** — Ships as a native Electron app for Windows, macOS, and Linux
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Layer | Technology |
+|---|---|
+| Frontend | React 19 + TypeScript |
+| Styling | Tailwind CSS v4 |
+| Build | Vite 8 |
+| Backend | Supabase (PostgreSQL + Realtime + Auth + RLS) |
+| Desktop | Electron 41 |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Getting Started
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Prerequisites
+
+- Node.js 18+
+- A [Supabase](https://supabase.com) project
+
+### Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Add your Supabase credentials
+cp .env.example .env
+# Fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+# Web (browser)
+npm run dev
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Desktop (Electron)
+npm run electron:dev
 ```
+
+### Build
+
+```bash
+# Web
+npm run build
+
+# Desktop installer
+npm run electron:build
+```
+
+---
+
+## Project Structure
+
+```
+src/
+├── components/       # UI components (ChatPage, HomePage, ProfilePage, ...)
+├── context/          # React contexts (Auth, Presence, Notifications, Messages)
+├── lib/              # Supabase client + shared types
+└── index.css         # Global styles
+electron/             # Electron main process
+```
+
+---
+
+## License
+
+Private — all rights reserved.
