@@ -207,10 +207,10 @@ export default function ExplorePage({ onStartChat }: Props) {
               const isOnline = presenceStatus === 'online' || presenceStatus === 'away'
 
               return (
-                <button
+                <div
                   key={p.id}
                   onClick={() => setViewingProfile(p)}
-                  className="bg-white/90 border border-rose-100/60 rounded-2xl p-4 flex flex-col items-center gap-2 hover:shadow-lg hover:shadow-rose-100/50 hover:-translate-y-0.5 transition-all group text-center"
+                  className="bg-white/90 border border-rose-100/60 rounded-2xl p-4 flex flex-col items-center gap-2 hover:shadow-lg hover:shadow-rose-100/50 hover:-translate-y-0.5 transition-all group text-center cursor-pointer"
                 >
                   {/* Avatar */}
                   <div className="relative">
@@ -261,7 +261,7 @@ export default function ExplorePage({ onStartChat }: Props) {
                   >
                     {status === 'none' ? '+ Connect' : status === 'pending_sent' ? 'Cancel' : '✓ Connected'}
                   </button>
-                </button>
+                </div>
               )
             })}
           </div>
