@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import './App.css'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationsProvider } from './context/NotificationsContext'
 import { PresenceProvider } from './context/PresenceContext'
 import { MessageNotificationsProvider, useMessageNotifications } from './context/MessageNotificationsContext'
 import Sidebar from './components/Sidebar'
-import BottomNav, { type Tab } from './components/BottomNav'
+import BottomNav from './components/BottomNav'
 import HomePage from './components/HomePage'
 import ChatPage from './components/ChatPage'
 import ProfilePage from './components/ProfilePage'
@@ -15,18 +16,18 @@ import type { Profile } from './lib/types'
 
 function AppContent() {
   const { user, loading } = useAuth()
-  const [activeTab, setActiveTab] = useState<Tab>('home')
-  const [chatTarget, setChatTarget] = useState<Profile | null>(null)
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { latestNotif, clearUnread, dismissNotif } = useMessageNotifications()
 
   const openChat = (profile: Profile) => {
-    setChatTarget(profile)
-    setActiveTab('chat')
+    navigate('/chat', { state: { chatTarget: profile } })
   }
 
+  // Clear message badge when on chat route
   useEffect(() => {
-    if (activeTab === 'chat') clearUnread()
-  }, [activeTab])
+    if (pathname === '/chat') clearUnread()
+  }, [pathname])
 
   if (loading) {
     return (
@@ -45,10 +46,10 @@ function AppContent() {
     <div className="flex h-screen w-screen overflow-hidden bg-linear-to-br from-rose-50 via-fuchsia-50/40 to-violet-50/30">
 
       {/* Message toast notification */}
-      {latestNotif && activeTab !== 'chat' && (
+      {latestNotif && pathname !== '/chat' && (
         <div
           className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 cursor-pointer"
-          onClick={() => { setActiveTab('chat'); dismissNotif() }}
+          onClick={() => { navigate('/chat'); dismissNotif() }}
         >
           <div className="flex items-center gap-3 bg-gray-900/95 backdrop-blur-sm text-white px-4 py-3 rounded-2xl shadow-2xl max-w-xs w-max">
             <div className="w-8 h-8 rounded-full bg-linear-to-br from-rose-500 to-pink-400 flex items-center justify-center text-xs font-bold shrink-0">
@@ -71,34 +72,36 @@ function AppContent() {
       )}
 
       {/* Sidebar — tablet and desktop */}
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar />
 
       {/* Content column */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-hidden">
-          {activeTab === 'home' && (
-            <div className="h-full overflow-y-auto">
-              <HomePage onStartChat={openChat} />
-            </div>
-          )}
-          {activeTab === 'explore' && (
-            <div className="h-full overflow-y-auto">
-              <ExplorePage onStartChat={openChat} />
-            </div>
-          )}
-          {activeTab === 'chat' && (
-            <ChatPage chatTarget={chatTarget} onChatTargetConsumed={() => setChatTarget(null)} />
-          )}
-          {activeTab === 'profile' && (
-            <div className="h-full overflow-y-auto">
-              <ProfilePage onStartChat={openChat} />
-            </div>
-          )}
+          <Routes>
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/home" element={
+              <div className="h-full overflow-y-auto">
+                <HomePage onStartChat={openChat} />
+              </div>
+            } />
+            <Route path="/explore" element={
+              <div className="h-full overflow-y-auto">
+                <ExplorePage onStartChat={openChat} />
+              </div>
+            } />
+            <Route path="/chat" element={<ChatPage onStartChat={openChat} />} />
+            <Route path="/profile" element={
+              <div className="h-full overflow-y-auto">
+                <ProfilePage onStartChat={openChat} />
+              </div>
+            } />
+            <Route path="*" element={<Navigate to="/home" replace />} />
+          </Routes>
         </main>
 
         {/* Bottom nav — mobile only */}
         <div className="md:hidden shrink-0">
-          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          <BottomNav />
         </div>
       </div>
     </div>
@@ -107,14 +110,16 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NotificationsProvider>
-        <PresenceProvider>
-          <MessageNotificationsProvider>
-            <AppContent />
-          </MessageNotificationsProvider>
-        </PresenceProvider>
-      </NotificationsProvider>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <NotificationsProvider>
+          <PresenceProvider>
+            <MessageNotificationsProvider>
+              <AppContent />
+            </MessageNotificationsProvider>
+          </PresenceProvider>
+        </NotificationsProvider>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }

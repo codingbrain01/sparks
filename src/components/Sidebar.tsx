@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNotifications } from '../context/NotificationsContext'
 import { usePresence } from '../context/PresenceContext'
@@ -6,15 +7,11 @@ import { useMessageNotifications } from '../context/MessageNotificationsContext'
 import NotificationPanel from './NotificationPanel'
 import StatusDot, { STATUS_META } from './StatusDot'
 import Avatar from './Avatar'
-import type { Tab } from './BottomNav'
 import type { UserStatus } from '../lib/types'
 
-interface Props {
-  activeTab: Tab
-  onTabChange: (tab: Tab) => void
-}
+type RouteId = 'home' | 'explore' | 'chat' | 'profile'
 
-const navItems: { id: Tab; label: string; icon: (active: boolean) => JSX.Element }[] = [
+const navItems: { id: RouteId; label: string; icon: (active: boolean) => JSX.Element }[] = [
   {
     id: 'home',
     label: 'Home',
@@ -53,7 +50,9 @@ const navItems: { id: Tab; label: string; icon: (active: boolean) => JSX.Element
   },
 ]
 
-export default function Sidebar({ activeTab, onTabChange }: Props) {
+export default function Sidebar() {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { profile, signOut } = useAuth()
   const { count } = useNotifications()
   const { myStatus, setMyStatus } = usePresence()
@@ -104,11 +103,11 @@ export default function Sidebar({ activeTab, onTabChange }: Props) {
         </button>
 
         {navItems.map(({ id, label, icon }) => {
-          const active = activeTab === id
+          const active = pathname === `/${id}`
           return (
             <button
               key={id}
-              onClick={() => onTabChange(id)}
+              onClick={() => navigate(`/${id}`)}
               title={label}
               className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
                 active

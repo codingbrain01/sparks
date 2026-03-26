@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
@@ -77,13 +78,9 @@ function CallOverlay({
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
-export default function ChatPage({
-  chatTarget,
-  onChatTargetConsumed,
-}: {
-  chatTarget?: Profile | null
-  onChatTargetConsumed?: () => void
-}) {
+export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) => void }) {
+  const location = useLocation()
+  const chatTarget = (location.state as { chatTarget?: Profile } | null)?.chatTarget ?? null
   const { user } = useAuth()
   const { onlineMap } = usePresence()
   const [conversations, setConversations] = useState<ConversationWithPartner[]>([])
@@ -94,10 +91,14 @@ export default function ChatPage({
   const [callType, setCallType] = useState<'audio' | 'video' | null>(null)
   const [loadingConvs, setLoadingConvs] = useState(true)
   const [partnerTyping, setPartnerTyping] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [viewingImage, setViewingImage] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const typingChannelRef = useRef<RealtimeChannel | null>(null)
   const partnerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const startingConvRef = useRef<string | null>(null)  // guard against concurrent startConversation calls
 
   // Delete conversation
   const [deleteConv, setDeleteConv] = useState<ConversationWithPartner | null>(null)
@@ -120,6 +121,30 @@ export default function ChatPage({
   const deleteForBoth = async () => {
     if (!deleteConv || !user) return
     setDeleting(true)
+
+    // Delete any images uploaded in this conversation from storage
+    const { data: imageMessages } = await supabase
+      .from('messages')
+      .select('image_url')
+      .eq('conversation_id', deleteConv.id)
+      .not('image_url', 'is', null)
+
+    if (imageMessages?.length) {
+      const paths = imageMessages
+        .map((m) => {
+          // Extract the storage path from the public URL: "{convId}/{filename}"
+          const url = m.image_url as string
+          const marker = '/object/public/chat-images/'
+          const idx = url.indexOf(marker)
+          return idx !== -1 ? url.slice(idx + marker.length).split('?')[0] : null
+        })
+        .filter(Boolean) as string[]
+
+      if (paths.length) {
+        await supabase.storage.from('chat-images').remove(paths)
+      }
+    }
+
     await supabase.from('conversations').delete().eq('id', deleteConv.id)
     setConversations((prev) => prev.filter((c) => c.id !== deleteConv.id))
     if (activeConv?.id === deleteConv.id) setActiveConv(null)
@@ -194,6 +219,17 @@ export default function ChatPage({
 
   useEffect(() => { fetchConversations() }, [user])
 
+  // ── Mark partner messages as read ────────────────────────────────────────
+  const markMessagesRead = async (convId: number) => {
+    if (!user) return
+    await supabase
+      .from('messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('conversation_id', convId)
+      .neq('sender_id', user.id)
+      .is('read_at', null)
+  }
+
   // ── Fetch messages + realtime when conversation changes ──────────────────
   useEffect(() => {
     if (!activeConv) return
@@ -203,7 +239,10 @@ export default function ChatPage({
       .select('*')
       .eq('conversation_id', activeConv.id)
       .order('created_at', { ascending: true })
-      .then(({ data }) => setMessages((data as Message[]) ?? []))
+      .then(({ data }) => {
+        setMessages((data as Message[]) ?? [])
+        markMessagesRead(activeConv.id)
+      })
 
     if (channelRef.current) supabase.removeChannel(channelRef.current)
 
@@ -212,7 +251,20 @@ export default function ChatPage({
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConv.id}` },
-        (payload) => setMessages((prev) => [...prev, payload.new as Message])
+        (payload) => {
+          const newMsg = payload.new as Message
+          setMessages((prev) => [...prev, newMsg])
+          if (newMsg.sender_id !== user?.id) markMessagesRead(activeConv.id)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConv.id}` },
+        (payload) => {
+          setMessages((prev) =>
+            prev.map((m) => m.id === payload.new.id ? { ...m, read_at: payload.new.read_at } : m)
+          )
+        }
       )
       .subscribe()
 
@@ -259,84 +311,128 @@ export default function ChatPage({
     })
   }
 
+  // ── Send image ───────────────────────────────────────────────────────────
+  const sendImage = async (file: File) => {
+    if (!activeConv || !user) return
+    setUploadingImage(true)
+    const ext = file.name.split('.').pop() ?? 'jpg'
+    const path = `${activeConv.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('chat-images').upload(path, file, { contentType: file.type })
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
+      await supabase.from('messages').insert({
+        conversation_id: activeConv.id,
+        sender_id: user.id,
+        content: '',
+        image_url: publicUrl,
+      })
+    }
+    setUploadingImage(false)
+  }
+
+  const downloadImage = async (url: string) => {
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = `image-${Date.now()}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      window.open(url, '_blank')
+    }
+  }
+
   // ── Start conversation with a user ───────────────────────────────────────
   const startConversation = async (partner: Profile) => {
     if (!user) return
+    // Prevent concurrent duplicate calls for the same partner (e.g. React StrictMode double-invoke)
+    if (startingConvRef.current === partner.id) return
+    startingConvRef.current = partner.id
 
-    // Fast path: already in local state
-    const existing = conversations.find((c) => c.partner.id === partner.id)
-    if (existing) { setActiveConv(existing); return }
+    try {
+      // Fast path: already in local state
+      const existing = conversations.find((c) => c.partner.id === partner.id)
+      if (existing) { setActiveConv(existing); return }
 
-    // DB check: find a conversation both users share
-    const { data: myParts } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', user.id)
-
-    if (myParts?.length) {
-      const myConvIds = myParts.map((p) => p.conversation_id)
-      const { data: shared } = await supabase
+      // DB check: find a conversation both users share
+      const { data: myParts } = await supabase
         .from('conversation_participants')
         .select('conversation_id')
-        .eq('user_id', partner.id)
-        .in('conversation_id', myConvIds)
-        .limit(1)
+        .eq('user_id', user.id)
 
-      if (shared?.length) {
-        const convId = shared[0].conversation_id
-        const { data: lastMsg } = await supabase
-          .from('messages')
-          .select('content, created_at')
-          .eq('conversation_id', convId)
-          .order('created_at', { ascending: false })
+      if (myParts?.length) {
+        const myConvIds = myParts.map((p) => p.conversation_id)
+        const { data: shared } = await supabase
+          .from('conversation_participants')
+          .select('conversation_id')
+          .eq('user_id', partner.id)
+          .in('conversation_id', myConvIds)
           .limit(1)
-          .maybeSingle()
 
-        const found: ConversationWithPartner = {
-          id: convId,
-          updated_at: lastMsg?.created_at ?? '',
-          partner,
-          last_message: lastMsg?.content ?? '',
-          unread_count: 0,
+        if (shared?.length) {
+          const convId = shared[0].conversation_id
+          const { data: lastMsg } = await supabase
+            .from('messages')
+            .select('content, created_at')
+            .eq('conversation_id', convId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          const found: ConversationWithPartner = {
+            id: convId,
+            updated_at: lastMsg?.created_at ?? '',
+            partner,
+            last_message: lastMsg?.content ?? '',
+            unread_count: 0,
+          }
+          setConversations((prev) =>
+            prev.some((c) => c.id === convId) ? prev : [found, ...prev]
+          )
+          setActiveConv(found)
+          return
         }
-        setConversations((prev) =>
-          prev.some((c) => c.id === convId) ? prev : [found, ...prev]
-        )
-        setActiveConv(found)
-        return
       }
+
+      // No existing conversation — create one
+      const { data: conv } = await supabase
+        .from('conversations')
+        .insert({})
+        .select()
+        .single()
+
+      if (!conv) return
+
+      await supabase.from('conversation_participants').insert([
+        { conversation_id: conv.id, user_id: user.id },
+        { conversation_id: conv.id, user_id: partner.id },
+      ])
+
+      const newConv: ConversationWithPartner = {
+        id: conv.id,
+        updated_at: new Date().toISOString(),
+        partner,
+        last_message: '',
+        unread_count: 0,
+      }
+      setConversations((prev) => [newConv, ...prev])
+      setActiveConv(newConv)
+    } finally {
+      startingConvRef.current = null
     }
-
-    // No existing conversation — create one
-    const { data: conv } = await supabase
-      .from('conversations')
-      .insert({})
-      .select()
-      .single()
-
-    if (!conv) return
-
-    await supabase.from('conversation_participants').insert([
-      { conversation_id: conv.id, user_id: user.id },
-      { conversation_id: conv.id, user_id: partner.id },
-    ])
-
-    const newConv: ConversationWithPartner = {
-      id: conv.id,
-      updated_at: new Date().toISOString(),
-      partner,
-      last_message: '',
-      unread_count: 0,
-    }
-    setConversations((prev) => [newConv, ...prev])
-    setActiveConv(newConv)
   }
 
   // ── Auto-open conversation from external navigation ───────────────────────
   useEffect(() => {
     if (!chatTarget) return
     startConversation(chatTarget)
-    onChatTargetConsumed?.()
+    // Clear router state so navigating back to /chat doesn't re-trigger
+    window.history.replaceState({ ...window.history.state, usr: {} }, '')
   }, [chatTarget])
 
   // ── Compose: fetch all users ──────────────────────────────────────────────
@@ -369,6 +465,35 @@ export default function ChatPage({
     <>
       {callType && activeConv && (
         <CallOverlay type={callType} person={activeConv.partner} onEnd={() => setCallType(null)} />
+      )}
+
+      {/* Image viewer modal */}
+      {viewingImage && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm" onClick={() => setViewingImage(null)}>
+          <button
+            onClick={() => setViewingImage(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={viewingImage}
+            alt="Full size"
+            className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={(e) => { e.stopPropagation(); downloadImage(viewingImage) }}
+            className="mt-5 flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors border border-white/20"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Save image
+          </button>
+        </div>
       )}
 
       {/* Delete conversation modal */}
@@ -601,7 +726,7 @@ export default function ChatPage({
                   <button
                     onClick={(e) => { e.stopPropagation(); setDeleteConv(conv) }}
                     title="Delete conversation"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-rose-500 hover:border-rose-200 transition-colors opacity-0 group-hover:opacity-100 shadow-sm"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-rose-500 hover:border-rose-200 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 shadow-sm"
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
@@ -700,15 +825,34 @@ export default function ChatPage({
                         textClassName="text-xs font-bold"
                       />
                     )}
-                    <div className={`max-w-[72%] lg:max-w-[60%] px-4 py-2.5 rounded-2xl ${
+                    <div className={`max-w-[72%] lg:max-w-[60%] rounded-2xl overflow-hidden ${
                       msg.sender_id === user?.id
                         ? 'bg-linear-to-r from-rose-500 to-pink-400 text-white rounded-br-sm'
                         : 'bg-white text-gray-800 rounded-bl-sm shadow-sm'
                     }`}>
-                      <p className="text-sm leading-relaxed">{msg.content}</p>
-                      <p className={`text-xs mt-1 ${msg.sender_id === user?.id ? 'text-rose-100' : 'text-gray-400'}`}>
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                      {msg.image_url && (
+                        <img
+                          src={msg.image_url}
+                          alt="Shared image"
+                          className="max-w-full block cursor-pointer"
+                          style={{ maxHeight: '300px', objectFit: 'cover', width: '100%' }}
+                          onClick={() => setViewingImage(msg.image_url!)}
+                        />
+                      )}
+                      <div className="px-4 py-2.5">
+                        {msg.content && <p className="text-sm leading-relaxed">{msg.content}</p>}
+                        <div className={`flex items-center gap-1 ${msg.content ? 'mt-1' : ''} ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
+                          <p className={`text-xs ${msg.sender_id === user?.id ? 'text-rose-100' : 'text-gray-400'}`}>
+                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {msg.sender_id === user?.id && (
+                            <span className="flex items-center -space-x-1">
+                              <span className={`text-xs leading-none ${msg.read_at ? 'text-white' : 'text-rose-300'}`}>✓</span>
+                              {msg.read_at && <span className="text-xs leading-none text-white">✓</span>}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -738,6 +882,33 @@ export default function ChatPage({
               {/* Message input */}
               <div className="shrink-0 bg-white border-t border-gray-100 px-4 lg:px-6 py-3">
                 <div className="flex items-center gap-2 max-w-3xl mx-auto">
+                  {/* Hidden file input */}
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) sendImage(file)
+                      e.target.value = ''
+                    }}
+                  />
+                  {/* Image button */}
+                  <button
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    title="Send image"
+                    className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {uploadingImage ? (
+                      <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                  </button>
                   <input
                     type="text"
                     value={message}

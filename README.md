@@ -13,10 +13,12 @@
 
 ### Messaging
 - **Real-time chat** — Instant messaging powered by Supabase Realtime
+- **Read receipts** — Single ✓ when sent, double ✓✓ when the other person has read it
+- **Image sharing** — Send photos inline; tap to view full-size with a save option
 - **Typing indicators** — Live "..." bubble when the other person is typing, auto-hides after 4 seconds of silence
 - **Message notifications** — Badge on the Chat tab + toast popup when a message arrives; disappears automatically when on the chat tab
 - **Unread count per conversation** — Badge counts unique conversations with unread messages, not individual messages
-- **Delete conversations** — Delete for yourself only, or delete for both parties
+- **Delete conversations** — Delete for yourself only, or delete for both parties (removes DB rows and storage images)
 
 ### Profiles
 - **Profile photos** — Upload, change, or remove your avatar; photo appears everywhere across the app (chat, explore, feed, notifications)
@@ -38,6 +40,7 @@
 - **Privacy controls** — Set posts to Public, Friends only, or Private
 
 ### Platform
+- **URL routing** — Clean browser URLs (`/home`, `/chat`, `/profile`) via React Router
 - **Responsive design** — Full mobile support with bottom nav; collapsible desktop sidebar
 - **Cross-platform desktop** — Ships as a native Electron app for Windows, macOS, and Linux
 - **Frosted glass UI** — Rose/pink/fuchsia romantic theme with backdrop blur throughout
@@ -49,6 +52,7 @@
 | Layer | Technology |
 |---|---|
 | Frontend | React 19 + TypeScript |
+| Routing | React Router v7 |
 | Styling | Tailwind CSS v4 |
 | Build | Vite 8 |
 | Backend | Supabase (PostgreSQL + Realtime + Auth + Storage + RLS) |
@@ -63,7 +67,10 @@
 - Node.js 18+
 - A [Supabase](https://supabase.com) project with:
   - `profiles`, `connections`, `conversations`, `conversation_participants`, `messages`, `posts`, `post_comments`, `post_likes` tables
-  - A public `avatars` storage bucket with RLS policies for authenticated uploads
+  - `messages` table requires `read_at TIMESTAMPTZ` and `image_url TEXT` columns
+  - A public `avatars` storage bucket for profile photos
+  - A public `chat-images` storage bucket for chat image uploads
+  - RLS policies for authenticated reads/writes on both buckets
 
 ### Setup
 
@@ -96,6 +103,8 @@ npm run build
 npm run electron:build
 ```
 
+> **Web production note:** configure your server to redirect all routes to `index.html` (e.g. Netlify `_redirects`, Vercel rewrites) for client-side routing to work on refresh.
+
 ---
 
 ## Project Structure
@@ -104,7 +113,7 @@ npm run electron:build
 src/
 ├── components/       # UI components
 │   ├── Avatar.tsx        # Shared avatar component (photo or initials fallback)
-│   ├── ChatPage.tsx      # Real-time messaging with typing indicators
+│   ├── ChatPage.tsx      # Real-time messaging, read receipts, image sharing
 │   ├── ExplorePage.tsx   # Browse & filter profiles
 │   ├── HomePage.tsx      # Social feed
 │   ├── ProfilePage.tsx   # Profile view, edit, posts, connections
