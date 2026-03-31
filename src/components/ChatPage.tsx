@@ -92,7 +92,9 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
   const [loadingConvs, setLoadingConvs] = useState(true)
   const [partnerTyping, setPartnerTyping] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [viewingImage, setViewingImage] = useState<string | null>(null)
+  const [viewingVideo, setViewingVideo] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const typingChannelRef = useRef<RealtimeChannel | null>(null)
@@ -311,11 +313,17 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
     })
   }
 
-  // ── Send image ───────────────────────────────────────────────────────────
+  // ── Send image / video ───────────────────────────────────────────────────
   const sendImage = async (file: File) => {
     if (!activeConv || !user) return
+    const MAX = 25 * 1024 * 1024
+    if (file.size > MAX) {
+      setUploadError('File too large. Maximum size is 25 MB.')
+      setTimeout(() => setUploadError(null), 4000)
+      return
+    }
     setUploadingImage(true)
-    const ext = file.name.split('.').pop() ?? 'jpg'
+    const ext = file.name.split('.').pop() ?? 'bin'
     const path = `${activeConv.id}/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('chat-images').upload(path, file, { contentType: file.type })
     if (!error) {
@@ -492,6 +500,37 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             Save image
+          </button>
+        </div>
+      )}
+
+      {/* Video viewer modal */}
+      {viewingVideo && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-sm p-4" onClick={() => setViewingVideo(null)}>
+          <button
+            onClick={() => setViewingVideo(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <video
+            src={viewingVideo}
+            controls
+            autoPlay
+            className="rounded-lg shadow-2xl"
+            style={{ maxWidth: '100%', maxHeight: '85vh', width: 'auto', height: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={(e) => { e.stopPropagation(); downloadImage(viewingVideo) }}
+            className="mt-5 flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors border border-white/20"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Save video
           </button>
         </div>
       )}
@@ -831,13 +870,33 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
                         : 'bg-white text-gray-800 rounded-bl-sm shadow-sm'
                     }`}>
                       {msg.image_url && (
-                        <img
-                          src={msg.image_url}
-                          alt="Shared image"
-                          className="max-w-full block cursor-pointer"
-                          style={{ maxHeight: '300px', objectFit: 'cover', width: '100%' }}
-                          onClick={() => setViewingImage(msg.image_url!)}
-                        />
+                        /\.(mp4|mov|webm|ogg)(\?|$)/i.test(msg.image_url) ? (
+                          <div
+                            className="relative cursor-pointer group/video"
+                            onClick={() => setViewingVideo(msg.image_url!)}
+                          >
+                            <video
+                              src={msg.image_url}
+                              className="max-w-full block pointer-events-none"
+                              style={{ maxHeight: '300px', width: '100%' }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/video:bg-black/30 transition-colors">
+                              <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                <svg className="w-5 h-5 text-gray-800 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M8 5v14l11-7z" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <img
+                            src={msg.image_url}
+                            alt="Shared image"
+                            className="max-w-full block cursor-pointer"
+                            style={{ maxHeight: '300px', objectFit: 'cover', width: '100%' }}
+                            onClick={() => setViewingImage(msg.image_url!)}
+                          />
+                        )
                       )}
                       <div className="px-4 py-2.5">
                         {msg.content && <p className="text-sm leading-relaxed">{msg.content}</p>}
@@ -879,6 +938,16 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
                 <div ref={messagesEndRef} />
               </div>
 
+              {/* Upload error toast */}
+              {uploadError && (
+                <div className="shrink-0 mx-4 lg:mx-6 mb-2 mt-1 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-center gap-2">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {uploadError}
+                </div>
+              )}
+
               {/* Message input */}
               <div className="shrink-0 bg-white border-t border-gray-100 px-4 lg:px-6 py-3">
                 <div className="flex items-center gap-2 max-w-3xl mx-auto">
@@ -886,7 +955,7 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
                   <input
                     ref={imageInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0]
@@ -894,11 +963,11 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
                       e.target.value = ''
                     }}
                   />
-                  {/* Image button */}
+                  {/* Image/video button */}
                   <button
                     onClick={() => imageInputRef.current?.click()}
                     disabled={uploadingImage}
-                    title="Send image"
+                    title="Send image or video"
                     className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0 disabled:opacity-50"
                   >
                     {uploadingImage ? (
