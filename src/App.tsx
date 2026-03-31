@@ -100,7 +100,7 @@ function AppShell() {
                 <ExplorePage onStartChat={openChat} />
               </div>
             } />
-            <Route path="/chat" element={<ChatPage onStartChat={openChat} />} />
+            <Route path="/chat" element={<ChatPage />} />
             <Route path="/profile" element={
               <div className="h-full overflow-y-auto">
                 <ProfilePage onStartChat={openChat} />

@@ -29,7 +29,7 @@ function AudioPlayer({ src, isSender }: { src: string; isSender: boolean }) {
   }
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 min-w-[180px] ${isSender ? '' : ''}`}>
+    <div className={`flex items-center gap-2 px-3 py-2 min-w-45 ${isSender ? '' : ''}`}>
       <audio
         ref={audioRef}
         src={src}
@@ -152,7 +152,7 @@ function CallOverlay({
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
-export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) => void }) {
+export default function ChatPage() {
   const location = useLocation()
   const chatTarget = (location.state as { chatTarget?: Profile } | null)?.chatTarget ?? null
   const { user } = useAuth()
