@@ -15,10 +15,13 @@
 - **Real-time chat** — Instant messaging powered by Supabase Realtime
 - **Read receipts** — Single ✓ when sent, double ✓✓ when the other person has read it
 - **Image sharing** — Send photos inline; tap to view full-size with a save option
+- **Video sharing** — Send video clips (mp4, mov, webm); tap the thumbnail to open a full-screen player with save option
+- **Voice messages** — Hold mic button to record, live timer shows duration; compact inline player with progress bar, play/pause, and seek on the receiving end
+- **25 MB file limit** — Enforced client-side for all uploads (images, videos, voice); error toast shown if exceeded
 - **Typing indicators** — Live "..." bubble when the other person is typing, auto-hides after 4 seconds of silence
 - **Message notifications** — Badge on the Chat tab + toast popup when a message arrives; disappears automatically when on the chat tab
 - **Unread count per conversation** — Badge counts unique conversations with unread messages, not individual messages
-- **Delete conversations** — Delete for yourself only, or delete for both parties (removes DB rows and storage images)
+- **Delete conversations** — Delete for yourself only, or delete for both parties (removes DB rows and storage files)
 
 ### Profiles
 - **Profile photos** — Upload, change, or remove your avatar; photo appears everywhere across the app (chat, explore, feed, notifications)

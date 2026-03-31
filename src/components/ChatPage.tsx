@@ -8,6 +8,80 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import StatusDot, { STATUS_META } from './StatusDot'
 import Avatar from './Avatar'
 
+// ─── Voice message player ──────────────────────────────────────────────────
+function AudioPlayer({ src, isSender }: { src: string; isSender: boolean }) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
+
+  const toggle = () => {
+    const a = audioRef.current
+    if (!a) return
+    if (playing) { a.pause() } else { a.play() }
+  }
+
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${sec.toString().padStart(2, '0')}`
+  }
+
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 min-w-[180px] ${isSender ? '' : ''}`}>
+      <audio
+        ref={audioRef}
+        src={src}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0) }}
+        onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
+        onTimeUpdate={(e) => {
+          const a = e.target as HTMLAudioElement
+          setCurrentTime(a.currentTime)
+          setProgress(a.duration ? (a.currentTime / a.duration) * 100 : 0)
+        }}
+      />
+      <button
+        onClick={toggle}
+        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+          isSender ? 'bg-white/20 hover:bg-white/30' : 'bg-rose-100 hover:bg-rose-200 text-rose-500'
+        }`}
+      >
+        {playing ? (
+          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+          </svg>
+        ) : (
+          <svg className="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </button>
+      <div className="flex-1 flex flex-col gap-1 min-w-0">
+        <div
+          className={`w-full h-1.5 rounded-full cursor-pointer ${isSender ? 'bg-white/30' : 'bg-gray-200'}`}
+          onClick={(e) => {
+            const a = audioRef.current
+            if (!a || !a.duration) return
+            const rect = e.currentTarget.getBoundingClientRect()
+            a.currentTime = ((e.clientX - rect.left) / rect.width) * a.duration
+          }}
+        >
+          <div
+            className={`h-full rounded-full transition-all ${isSender ? 'bg-white' : 'bg-rose-400'}`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <span className={`text-xs ${isSender ? 'text-rose-100' : 'text-gray-400'}`}>
+          {currentTime > 0 ? fmt(currentTime) : fmt(duration)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Call overlay ──────────────────────────────────────────────────────────
 function CallOverlay({
   type, person, onEnd,
@@ -95,6 +169,12 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [viewingImage, setViewingImage] = useState<string | null>(null)
   const [viewingVideo, setViewingVideo] = useState<string | null>(null)
+  // Voice recording
+  const [recording, setRecording] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const typingChannelRef = useRef<RealtimeChannel | null>(null)
@@ -336,6 +416,64 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
       })
     }
     setUploadingImage(false)
+  }
+
+  // ── Voice recording ──────────────────────────────────────────────────────
+  const startRecording = async () => {
+    if (!activeConv || !user) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+      const recorder = new MediaRecorder(stream, { mimeType })
+      audioChunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        const blob = new Blob(audioChunksRef.current, { type: mimeType })
+        const ext = mimeType.includes('webm') ? 'webm' : 'ogg'
+        const path = `${activeConv.id}/voice-${Date.now()}.${ext}`
+        setUploadingImage(true)
+        const { error } = await supabase.storage.from('chat-images').upload(path, blob, { contentType: mimeType })
+        if (!error) {
+          const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
+          await supabase.from('messages').insert({
+            conversation_id: activeConv.id,
+            sender_id: user.id,
+            content: '',
+            image_url: publicUrl,
+          })
+        }
+        setUploadingImage(false)
+      }
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setRecording(true)
+      setRecordingSeconds(0)
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000)
+    } catch {
+      setUploadError('Microphone access denied.')
+      setTimeout(() => setUploadError(null), 4000)
+    }
+  }
+
+  const stopRecording = () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+    mediaRecorderRef.current?.stop()
+    mediaRecorderRef.current = null
+    setRecording(false)
+    setRecordingSeconds(0)
+  }
+
+  const cancelRecording = () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+    mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop())
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.onstop = null  // prevent upload
+      mediaRecorderRef.current.stop()
+      mediaRecorderRef.current = null
+    }
+    setRecording(false)
+    setRecordingSeconds(0)
   }
 
   const downloadImage = async (url: string) => {
@@ -870,7 +1008,9 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
                         : 'bg-white text-gray-800 rounded-bl-sm shadow-sm'
                     }`}>
                       {msg.image_url && (
-                        /\.(mp4|mov|webm|ogg)(\?|$)/i.test(msg.image_url) ? (
+                        /\.(mp3|ogg|webm|m4a|wav)(\?|$)/i.test(msg.image_url) && msg.image_url.includes('voice-') ? (
+                          <AudioPlayer src={msg.image_url} isSender={msg.sender_id === user?.id} />
+                        ) : /\.(mp4|mov|webm|ogg)(\?|$)/i.test(msg.image_url) ? (
                           <div
                             className="relative cursor-pointer group/video"
                             onClick={() => setViewingVideo(msg.image_url!)}
@@ -963,38 +1103,89 @@ export default function ChatPage({ onStartChat }: { onStartChat?: (p: Profile) =
                       e.target.value = ''
                     }}
                   />
-                  {/* Image/video button */}
-                  <button
-                    onClick={() => imageInputRef.current?.click()}
-                    disabled={uploadingImage}
-                    title="Send image or video"
-                    className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0 disabled:opacity-50"
-                  >
-                    {uploadingImage ? (
-                      <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    )}
-                  </button>
-                  <input
-                    type="text"
-                    value={message}
-                    onChange={(e) => { setMessage(e.target.value); broadcastTyping() }}
-                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                    placeholder="Type a message…"
-                    className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-rose-300 transition-shadow"
-                  />
-                  <button
-                    onClick={sendMessage}
-                    disabled={!message.trim()}
-                    className="w-10 h-10 rounded-full bg-linear-to-r from-rose-500 to-pink-400 flex items-center justify-center text-white shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                  </button>
+
+                  {recording ? (
+                    /* ── Recording mode ── */
+                    <>
+                      {/* Cancel */}
+                      <button
+                        onClick={cancelRecording}
+                        title="Cancel"
+                        className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                      {/* Timer */}
+                      <div className="flex-1 flex items-center gap-2 bg-rose-50 rounded-full px-4 py-2.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                        <span className="text-sm font-medium text-rose-600">
+                          {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60).toString().padStart(2, '0')}
+                        </span>
+                        <span className="text-xs text-rose-400">Recording…</span>
+                      </div>
+                      {/* Send */}
+                      <button
+                        onClick={stopRecording}
+                        title="Send voice message"
+                        className="w-10 h-10 rounded-full bg-linear-to-r from-rose-500 to-pink-400 flex items-center justify-center text-white shadow-sm hover:shadow-md transition-all shrink-0"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                      </button>
+                    </>
+                  ) : (
+                    /* ── Normal mode ── */
+                    <>
+                      {/* Image/video button */}
+                      <button
+                        onClick={() => imageInputRef.current?.click()}
+                        disabled={uploadingImage}
+                        title="Send image or video"
+                        className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0 disabled:opacity-50"
+                      >
+                        {uploadingImage ? (
+                          <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </button>
+                      <input
+                        type="text"
+                        value={message}
+                        onChange={(e) => { setMessage(e.target.value); broadcastTyping() }}
+                        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                        placeholder="Type a message…"
+                        className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-rose-300 transition-shadow"
+                      />
+                      {message.trim() ? (
+                        /* Send text button */
+                        <button
+                          onClick={sendMessage}
+                          className="w-10 h-10 rounded-full bg-linear-to-r from-rose-500 to-pink-400 flex items-center justify-center text-white shadow-sm hover:shadow-md transition-all shrink-0"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                        </button>
+                      ) : (
+                        /* Mic button — shown when input is empty */
+                        <button
+                          onClick={startRecording}
+                          title="Record voice message"
+                          className="w-10 h-10 rounded-full bg-gray-100 hover:bg-rose-100 hover:text-rose-500 flex items-center justify-center text-gray-500 transition-colors shrink-0"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </>
