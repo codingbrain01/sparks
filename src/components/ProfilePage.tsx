@@ -3,14 +3,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import type { Gender, LookingFor, Post, PostComment, Privacy, Profile } from '../lib/types'
 import Avatar from './Avatar'
+import UserProfileModal from './UserProfileModal'
 
 function genderGradient(gender?: Gender) {
   return gender === 'Man'
     ? 'from-blue-500 to-indigo-400'
     : 'from-rose-500 to-pink-400'
 }
-
-import UserProfileModal from './UserProfileModal'
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
