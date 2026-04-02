@@ -25,6 +25,8 @@
 
 ### Profiles
 - **Profile photos** — Upload, change, or remove your avatar; photo appears everywhere across the app (chat, explore, feed, notifications)
+- **Photo gallery** — Upload multiple photos to your profile (images only, 25 MB limit); 3-column grid view; tap any photo to view full-size, set it as your avatar, or delete it
+- **Gallery on other profiles** — View a person's photo gallery when opening their profile modal from Explore or the home feed
 - **3-step signup** — Guided onboarding: account → profile → preferences
 - **Edit profile** — Update name, username, age, bio, looking for, and hobbies
 - **My Posts** — View, edit, delete your posts; click any post to open a detail view with full comments and comment input
@@ -73,8 +75,10 @@
   - `profiles`, `connections`, `conversations`, `conversation_participants`, `messages`, `posts`, `post_comments`, `post_likes` tables
   - `messages` table requires `read_at TIMESTAMPTZ` and `image_url TEXT` columns
   - A public `avatars` storage bucket for profile photos
-  - A public `chat-images` storage bucket for chat image uploads
-  - RLS policies for authenticated reads/writes on both buckets
+  - A public `chat-images` storage bucket for chat image/video/voice uploads
+  - A public `gallery` storage bucket for profile photo galleries
+  - `profile_photos` table with `user_id`, `url`, `order_index`, `created_at`
+  - RLS policies for authenticated reads/writes on all buckets
 
 ### Setup
 

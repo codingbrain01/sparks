@@ -44,6 +44,14 @@ export interface PostComment {
 
 export type ConnStatus = 'none' | 'pending_sent' | 'pending_received' | 'accepted'
 
+export interface ProfilePhoto {
+  id: string
+  user_id: string
+  url: string
+  order_index: number
+  created_at: string
+}
+
 export interface Message {
   id: number
   conversation_id: number

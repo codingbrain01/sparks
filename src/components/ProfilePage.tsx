@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import type { Gender, LookingFor, Post, PostComment, Privacy, Profile } from '../lib/types'
+import type { Gender, LookingFor, Post, PostComment, Privacy, Profile, ProfilePhoto } from '../lib/types'
 import Avatar from './Avatar'
 import UserProfileModal from './UserProfileModal'
 
@@ -98,6 +98,13 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
   const [editContent, setEditContent] = useState('')
   const [editPrivacyId, setEditPrivacyId] = useState<number | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+
+  // Gallery
+  const [galleryPhotos, setGalleryPhotos] = useState<ProfilePhoto[]>([])
+  const [galleryLoading, setGalleryLoading] = useState(false)
+  const [uploadingGallery, setUploadingGallery] = useState(false)
+  const [galleryUploadError, setGalleryUploadError] = useState('')
+  const [viewingGalleryPhoto, setViewingGalleryPhoto] = useState<ProfilePhoto | null>(null)
 
   // Post detail modal
   const [viewingPost, setViewingPost] = useState<Post | null>(null)
@@ -253,6 +260,65 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
     }
     setNewComment('')
     setAddingComment(false)
+  }
+
+  // ── Gallery ─────────────────────────────────────────────────────────────
+  const fetchGalleryPhotos = async () => {
+    if (!profile) return
+    setGalleryLoading(true)
+    const { data } = await supabase
+      .from('profile_photos')
+      .select('*')
+      .eq('user_id', profile.id)
+      .order('order_index', { ascending: true })
+    setGalleryPhotos((data ?? []) as ProfilePhoto[])
+    setGalleryLoading(false)
+  }
+
+  useEffect(() => { if (profile) fetchGalleryPhotos() }, [profile?.id])
+
+  const uploadGalleryPhoto = async (file: File) => {
+    if (!profile) return
+    if (file.size > 25 * 1024 * 1024) {
+      setGalleryUploadError('File too large — max 25 MB')
+      setTimeout(() => setGalleryUploadError(''), 3000)
+      return
+    }
+    setUploadingGallery(true)
+    const ext = file.name.split('.').pop() ?? 'jpg'
+    const path = `${profile.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage
+      .from('gallery')
+      .upload(path, file, { contentType: file.type })
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(path)
+      const { data } = await supabase
+        .from('profile_photos')
+        .insert({ user_id: profile.id, url: publicUrl, order_index: galleryPhotos.length })
+        .select()
+        .single()
+      if (data) setGalleryPhotos((prev) => [...prev, data as ProfilePhoto])
+    }
+    setUploadingGallery(false)
+  }
+
+  const deleteGalleryPhoto = async (photo: ProfilePhoto) => {
+    const marker = '/object/public/gallery/'
+    const idx = photo.url.indexOf(marker)
+    if (idx !== -1) {
+      const path = photo.url.slice(idx + marker.length).split('?')[0]
+      await supabase.storage.from('gallery').remove([path])
+    }
+    await supabase.from('profile_photos').delete().eq('id', photo.id)
+    setGalleryPhotos((prev) => prev.filter((p) => p.id !== photo.id))
+    setViewingGalleryPhoto(null)
+  }
+
+  const setPhotoAsAvatar = async (url: string) => {
+    if (!profile) return
+    await supabase.from('profiles').update({ avatar_url: url }).eq('id', profile.id)
+    await refreshProfile()
+    setViewingGalleryPhoto(null)
   }
 
   if (!profile) {
@@ -607,6 +673,46 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
               )}
             </div>
 
+            {/* My Photos */}
+            <div className="bg-white rounded-2xl shadow-sm">
+              <div className="px-4 lg:px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">My Photos</p>
+                <label className={`cursor-pointer flex items-center gap-1.5 text-xs font-semibold transition-colors ${uploadingGallery ? 'text-gray-400' : 'text-rose-500 hover:text-rose-600'}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  {uploadingGallery ? 'Uploading…' : 'Add Photo'}
+                  <input type="file" accept="image/*" className="hidden" disabled={uploadingGallery}
+                    onChange={(e) => { if (e.target.files?.[0]) uploadGalleryPhoto(e.target.files[0]); e.target.value = '' }} />
+                </label>
+              </div>
+              {galleryUploadError && (
+                <p className="text-xs text-red-500 px-4 pt-3">{galleryUploadError}</p>
+              )}
+              {galleryLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-6 h-6 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin" />
+                </div>
+              ) : galleryPhotos.length === 0 ? (
+                <div className="px-4 py-10 text-center">
+                  <p className="text-3xl mb-2">📷</p>
+                  <p className="text-sm text-gray-400">No photos yet. Add some to show off your best moments!</p>
+                </div>
+              ) : (
+                <div className="p-4 grid grid-cols-3 gap-2">
+                  {galleryPhotos.map((photo) => (
+                    <button
+                      key={photo.id}
+                      onClick={() => setViewingGalleryPhoto(photo)}
+                      className="aspect-square rounded-xl overflow-hidden bg-gray-100 hover:opacity-90 transition-opacity"
+                    >
+                      <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* My Posts */}
             <div className="bg-white rounded-2xl shadow-sm">
               <div className="px-4 lg:px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -751,6 +857,48 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
         )}
       </div>
     </div>
+
+    {/* Gallery photo viewer */}
+    {viewingGalleryPhoto && (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-sm p-4">
+        <div className="absolute inset-0" onClick={() => setViewingGalleryPhoto(null)} />
+        <button
+          onClick={() => setViewingGalleryPhoto(null)}
+          className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors z-10"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <div className="relative flex flex-col items-center gap-5 max-w-lg w-full">
+          <img
+            src={viewingGalleryPhoto.url}
+            alt=""
+            className="rounded-2xl shadow-2xl max-h-[70vh] w-auto max-w-full object-contain"
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPhotoAsAvatar(viewingGalleryPhoto.url)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-gray-900 text-sm font-semibold shadow-lg hover:bg-gray-100 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Set as Avatar
+            </button>
+            <button
+              onClick={() => deleteGalleryPhoto(viewingGalleryPhoto)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-500 text-white text-sm font-semibold shadow-lg hover:bg-red-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {viewingProfile && (
       <UserProfileModal

@@ -1,4 +1,6 @@
-import type { Profile, ConnStatus, UserStatus } from '../lib/types'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+import type { Profile, ConnStatus, UserStatus, ProfilePhoto } from '../lib/types'
 import { usePresence } from '../context/PresenceContext'
 import StatusDot, { STATUS_META } from './StatusDot'
 import Avatar from './Avatar'
@@ -36,6 +38,24 @@ interface Props {
 export default function UserProfileModal({ profile, connStatus, onConnect, onClose, onMessage }: Props) {
   const { onlineMap } = usePresence()
   const presenceStatus = onlineMap[profile.id]
+
+  const [photos, setPhotos] = useState<ProfilePhoto[]>([])
+  const [photosLoading, setPhotosLoading] = useState(true)
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      setPhotosLoading(true)
+      const { data } = await supabase
+        .from('profile_photos')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('order_index', { ascending: true })
+      setPhotos((data ?? []) as ProfilePhoto[])
+      setPhotosLoading(false)
+    }
+    load()
+  }, [profile.id])
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
@@ -153,9 +173,50 @@ export default function UserProfileModal({ profile, connStatus, onConnect, onClo
               </div>
             )}
 
+            {/* Photos */}
+            {!photosLoading && photos.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Photos</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {photos.map((photo) => (
+                    <button
+                      key={photo.id}
+                      onClick={() => setViewingPhoto(photo.url)}
+                      className="aspect-square rounded-xl overflow-hidden bg-gray-100 hover:opacity-90 transition-opacity"
+                    >
+                      <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
+
+      {/* Full-size photo viewer */}
+      {viewingPhoto && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4"
+          onClick={() => setViewingPhoto(null)}
+        >
+          <button
+            onClick={() => setViewingPhoto(null)}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={viewingPhoto}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-2xl shadow-2xl max-h-[85vh] w-auto max-w-full object-contain"
+          />
+        </div>
+      )}
     </div>
   )
 }
