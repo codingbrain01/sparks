@@ -9,11 +9,7 @@ function genderGradient(gender?: Gender) {
     ? 'from-blue-500 to-indigo-400'
     : 'from-rose-500 to-pink-400'
 }
-function genderGradientLight(gender?: Gender) {
-  return gender === 'Man'
-    ? 'from-blue-400 to-indigo-300'
-    : 'from-rose-400 to-pink-300'
-}
+
 import UserProfileModal from './UserProfileModal'
 
 function timeAgo(dateStr: string) {
