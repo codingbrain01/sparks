@@ -629,7 +629,7 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
                     <div
                       key={post.id}
                       onClick={() => editingPostId !== post.id && openPost(post)}
-                      className="px-4 lg:px-6 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                      className={`px-4 lg:px-6 py-4 cursor-pointer hover:bg-gray-50 transition-colors relative ${menuOpenId === post.id || editPrivacyId === post.id || deleteConfirmId === post.id ? 'z-20' : 'z-0'}`}
                     >
 
                       {/* Post header */}
@@ -649,6 +649,8 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
                             </svg>
                           </button>
                           {menuOpenId === post.id && (
+                            <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
                             <div className="absolute right-0 top-8 w-40 bg-white rounded-xl shadow-lg border border-gray-100 z-20 overflow-hidden">
                               <button
                                 onClick={() => { setEditingPostId(post.id); setEditContent(post.content); setMenuOpenId(null) }}
@@ -663,6 +665,7 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
                                 className="w-full text-left px-4 py-2.5 text-sm text-rose-500 hover:bg-rose-50"
                               >Delete</button>
                             </div>
+                            </>
                           )}
                         </div>
                       </div>
@@ -695,36 +698,42 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
 
                       {/* Privacy picker */}
                       {editPrivacyId === post.id && (
-                        <div className="mt-2 flex gap-2" onClick={(e) => e.stopPropagation()}>
-                          {(['public', 'friends', 'private'] as Privacy[]).map((p) => (
-                            <button
-                              key={p}
-                              onClick={() => savePrivacy(post.id, p)}
-                              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                                post.privacy === p
-                                  ? 'bg-rose-500 text-white'
-                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                              }`}
-                            >
-                              {PRIVACY_ICON[p]} {p}
-                            </button>
-                          ))}
-                        </div>
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setEditPrivacyId(null) }} />
+                          <div className="relative z-20 mt-2 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                            {(['public', 'friends', 'private'] as Privacy[]).map((p) => (
+                              <button
+                                key={p}
+                                onClick={() => savePrivacy(post.id, p)}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                                  post.privacy === p
+                                    ? 'bg-rose-500 text-white'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                {PRIVACY_ICON[p]} {p}
+                              </button>
+                            ))}
+                          </div>
+                        </>
                       )}
 
                       {/* Delete confirm */}
                       {deleteConfirmId === post.id && (
-                        <div className="mt-2 flex gap-2 items-center bg-rose-50 rounded-xl px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                          <p className="text-xs text-rose-600 flex-1">Delete this post?</p>
-                          <button
-                            onClick={() => setDeleteConfirmId(null)}
-                            className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
-                          >Cancel</button>
-                          <button
-                            onClick={() => deletePost(post.id)}
-                            className="text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 px-3 py-1 rounded-lg transition-colors"
-                          >Delete</button>
-                        </div>
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null) }} />
+                          <div className="relative z-20 mt-2 flex gap-2 items-center bg-rose-50 rounded-xl px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                            <p className="text-xs text-rose-600 flex-1">Delete this post?</p>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+                            >Cancel</button>
+                            <button
+                              onClick={() => deletePost(post.id)}
+                              className="text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 px-3 py-1 rounded-lg transition-colors"
+                            >Delete</button>
+                          </div>
+                        </>
                       )}
 
                       {/* Stats */}

@@ -289,7 +289,7 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
             return (
               <div
                 key={post.id}
-                className="bg-white/90 backdrop-blur-sm px-4 py-4 border-b border-rose-100/40 lg:border-b-0 lg:rounded-2xl lg:shadow-sm lg:border lg:border-rose-100/60 relative overflow-hidden"
+                className={`bg-white/90 backdrop-blur-sm px-4 py-4 border-b border-rose-100/40 lg:border-b-0 lg:rounded-2xl lg:shadow-sm lg:border lg:border-rose-100/60 relative ${menuOpenId === post.id || editPrivacyId === post.id || deleteConfirmId === post.id ? 'z-20' : 'z-0'}`}
               >
                 {/* Gender accent strip */}
                 <div className={`absolute left-0 top-0 bottom-0 w-1 bg-linear-to-b ${gender === 'Man' ? 'from-blue-400 to-indigo-300' : 'from-rose-400 to-pink-300'}`} />
@@ -435,7 +435,9 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
 
                 {/* Edit privacy */}
                 {editPrivacyId === post.id && (
-                  <div className="mb-3 p-3 bg-violet-50/60 rounded-2xl pl-2">
+                  <>
+                  <div className="fixed inset-0 z-10" onClick={() => setEditPrivacyId(null)} />
+                  <div className="relative z-20 mb-3 p-3 bg-violet-50/60 rounded-2xl pl-2">
                     <p className="text-xs font-semibold text-violet-600 mb-2">Who can see this post?</p>
                     <div className="flex gap-2">
                       {(['public', 'friends', 'private'] as Privacy[]).map((opt) => (
@@ -456,11 +458,14 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
                       Cancel
                     </button>
                   </div>
+                  </>
                 )}
 
                 {/* Delete confirm */}
                 {deleteConfirmId === post.id && (
-                  <div className="mb-3 p-3 bg-red-50 rounded-2xl flex items-center justify-between gap-3">
+                  <>
+                  <div className="fixed inset-0 z-10" onClick={() => setDeleteConfirmId(null)} />
+                  <div className="relative z-20 mb-3 p-3 bg-red-50 rounded-2xl flex items-center justify-between gap-3">
                     <p className="text-sm text-red-600 font-medium">Delete this post?</p>
                     <div className="flex gap-2 shrink-0">
                       <button onClick={() => setDeleteConfirmId(null)} className="px-3 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
@@ -471,6 +476,7 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
                       </button>
                     </div>
                   </div>
+                  </>
                 )}
 
                 {/* Actions */}

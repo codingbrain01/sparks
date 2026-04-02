@@ -47,6 +47,7 @@
 - **Responsive design** — Full mobile support with bottom nav; collapsible desktop sidebar
 - **Cross-platform desktop** — Ships as a native Electron app for Windows, macOS, and Linux; reload shortcuts blocked in production kiosk mode
 - **Frosted glass UI** — Rose/pink/fuchsia romantic theme with backdrop blur throughout
+- **Click-outside-to-close** — All dropdowns and action panels (post menu, privacy picker, delete confirm) dismiss when clicking anywhere outside
 
 ---
 
