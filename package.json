@@ -1,6 +1,8 @@
 {
   "name": "dating-app",
   "productName": "Sparks",
+  "description": "Sparks — a modern dating app for meaningful connections",
+  "author": "codingbrain01",
   "main": "electron/main.cjs",
   "private": true,
   "version": "1.0.0",
@@ -23,7 +25,9 @@
       "dist/**/*",
       "electron/**/*"
     ],
+    "icon": "public/app-icon.png",
     "win": {
+      "icon": "public/app-icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -34,6 +38,7 @@
       ]
     },
     "mac": {
+      "icon": "public/app-icon.png",
       "target": [
         {
           "target": "dmg",
@@ -45,6 +50,7 @@
       ]
     },
     "linux": {
+      "icon": "public/app-icon.png",
       "target": [
         {
           "target": "AppImage",
