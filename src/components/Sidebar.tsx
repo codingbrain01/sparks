@@ -70,6 +70,17 @@ export default function Sidebar() {
         <h1 className="hidden lg:block text-xl font-bold bg-linear-to-r from-rose-500 via-pink-500 to-fuchsia-500 bg-clip-text text-transparent whitespace-nowrap">
           Sparks
         </h1>
+        {window.location.protocol === 'file:' && (
+          <button
+            onClick={() => (window as any).electronAPI?.closeApp()}
+            title="Exit app"
+            className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Navigation */}

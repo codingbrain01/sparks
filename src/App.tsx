@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { HashRouter, BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import './App.css'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationsProvider } from './context/NotificationsContext'
@@ -85,6 +85,19 @@ function AppShell() {
         </div>
       )}
 
+      {/* Exit button — mobile only, Electron packaged only */}
+      {window.location.protocol === 'file:' && (
+        <button
+          onClick={() => (window as any).electronAPI?.closeApp()}
+          title="Exit app"
+          className="md:hidden fixed top-3 right-3 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 hover:bg-red-500 text-white transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -133,9 +146,12 @@ function AppContent() {
   )
 }
 
+// Use HashRouter for packaged Electron (file://), BrowserRouter for dev (http://)
+const Router = window.location.protocol === 'file:' ? HashRouter : BrowserRouter
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <AuthProvider>
         <NotificationsProvider>
           <PresenceProvider>
@@ -145,6 +161,6 @@ export default function App() {
           </PresenceProvider>
         </NotificationsProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </Router>
   )
 }

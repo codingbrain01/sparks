@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, Menu, shell } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron')
 const path = require('path')
 
 // Detect dev mode — true when NOT packaged (i.e. running via `electron .`)
@@ -69,6 +69,8 @@ function createWindow() {
     })
   }
 }
+
+ipcMain.on('close-app', () => app.quit())
 
 app.whenReady().then(() => {
   // Enable touch events on Linux/Windows touch-screen kiosks
