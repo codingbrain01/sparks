@@ -90,7 +90,7 @@ function AppShell() {
         <button
           onClick={() => (window as any).electronAPI?.closeApp()}
           title="Exit app"
-          className="md:hidden fixed top-3 right-3 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 hover:bg-red-500 text-white transition-colors"
+          className="md:hidden fixed top-3 right-3 z-50 w-9 h-9 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white shadow-md transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

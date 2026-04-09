@@ -61,7 +61,18 @@ export default function AuthPage() {
       <div className="w-full sm:max-w-md lg:max-w-lg bg-white sm:rounded-3xl shadow-none sm:shadow-xl overflow-hidden">
 
         {/* Banner */}
-        <div className="bg-linear-to-r from-rose-500 to-pink-400 px-6 sm:px-8 pt-10 sm:pt-8 pb-6 text-center">
+        <div className="bg-linear-to-r from-rose-500 to-pink-400 px-6 sm:px-8 pt-10 sm:pt-8 pb-6 text-center relative">
+          {window.location.protocol === 'file:' && (
+            <button
+              onClick={() => (window as any).electronAPI?.closeApp()}
+              title="Exit app"
+              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
           <div className="text-4xl sm:text-5xl mb-2 sm:mb-3 select-none">💕</div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Sparks</h1>
           <p className="text-rose-100 text-sm sm:text-base mt-1">Find your spark today</p>
