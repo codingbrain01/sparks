@@ -1,6 +1,57 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useCall } from '../context/CallContext'
 import Avatar from './Avatar'
+
+// ── Ringtone via Web Audio API (no file needed) ───────────────────────────
+function useRingtone(active: boolean) {
+  const ctxRef = useRef<AudioContext | null>(null)
+  const stopRef = useRef<(() => void) | null>(null)
+
+  const ring = useCallback(() => {
+    const ctx = new AudioContext()
+    ctxRef.current = ctx
+    let running = true
+
+    const playBurst = (startAt: number) => {
+      if (!running) return
+      // Two-tone UK-style ring: 400Hz + 450Hz for 0.4s, silence 0.2s, repeat × 2, then 2s silence
+      [0, 0.6].forEach((offset) => {
+        const osc1 = ctx.createOscillator()
+        const osc2 = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc1.frequency.value = 400
+        osc2.frequency.value = 450
+        gain.gain.value = 0.18
+        osc1.connect(gain); osc2.connect(gain); gain.connect(ctx.destination)
+        const t = startAt + offset
+        osc1.start(t); osc2.start(t)
+        osc1.stop(t + 0.4); osc2.stop(t + 0.4)
+      })
+    }
+
+    const schedule = () => {
+      if (!running) return
+      const now = ctx.currentTime
+      playBurst(now)
+      // next ring cycle in 2.5s
+      setTimeout(() => schedule(), 2500)
+    }
+
+    schedule()
+    stopRef.current = () => { running = false; ctx.close() }
+  }, [])
+
+  useEffect(() => {
+    if (active) {
+      ring()
+    } else {
+      stopRef.current?.()
+      stopRef.current = null
+      ctxRef.current = null
+    }
+    return () => { stopRef.current?.(); stopRef.current = null }
+  }, [active, ring])
+}
 
 // Attaches a MediaStream to a <video> element
 function VideoEl({
@@ -33,6 +84,9 @@ export default function CallOverlay() {
 
   const [elapsed, setElapsed] = useState(0)
   const [accepting, setAccepting] = useState(false)
+
+  // Ring on incoming call; also ring (outgoing tone) while waiting for answer
+  useRingtone(!!incomingCall)
 
   // Call timer
   useEffect(() => {
