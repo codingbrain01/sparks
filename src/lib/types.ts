@@ -44,6 +44,17 @@ export interface PostComment {
 
 export type ConnStatus = 'none' | 'pending_sent' | 'pending_received' | 'accepted'
 
+export interface Call {
+  id: string
+  conversation_id: number
+  caller_id: string
+  callee_id: string
+  type: 'audio' | 'video'
+  status: 'missed' | 'declined' | 'ended'
+  duration_seconds: number
+  created_at: string
+}
+
 export interface ProfilePhoto {
   id: string
   user_id: string

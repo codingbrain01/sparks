@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
+import { useCall } from '../context/CallContext'
 import type { Message, ConversationWithPartner, Profile } from '../lib/types'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import StatusDot, { STATUS_META } from './StatusDot'
@@ -82,74 +83,7 @@ function AudioPlayer({ src, isSender }: { src: string; isSender: boolean }) {
   )
 }
 
-// ─── Call overlay ──────────────────────────────────────────────────────────
-function CallOverlay({
-  type, person, onEnd,
-}: {
-  type: 'audio' | 'video'
-  person: Profile
-  onEnd: () => void
-}) {
-  const [muted, setMuted] = useState(false)
-  const [camOff, setCamOff] = useState(false)
-
-  return (
-    <div className="fixed inset-0 z-60 bg-gray-900 flex flex-col items-center justify-between py-16 px-6">
-      <div className="flex flex-col items-center gap-4 mt-8">
-        <Avatar
-          firstName={person.first_name}
-          lastName={person.last_name}
-          gender={person.gender}
-          avatarUrl={person.avatar_url}
-          className="w-24 h-24 rounded-full shadow-lg"
-          textClassName="text-3xl font-bold"
-        />
-        <div className="text-center">
-          <p className="text-white text-xl font-bold">{person.first_name} {person.last_name}</p>
-          <p className="text-gray-400 text-sm mt-1">{type === 'video' ? 'Video calling…' : 'Calling…'}</p>
-        </div>
-      </div>
-
-      {type === 'video' && !camOff && (
-        <div className="w-full max-w-xs aspect-video bg-gray-800 rounded-2xl flex items-center justify-center border border-gray-700">
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center text-white font-bold text-xl mx-auto mb-2">You</div>
-            <p className="text-gray-400 text-xs">Your camera</p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center gap-6">
-        {type === 'video' && (
-          <button
-            onClick={() => setCamOff((v) => !v)}
-            className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${camOff ? 'bg-gray-600' : 'bg-gray-700 hover:bg-gray-600'} text-white`}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-          </button>
-        )}
-        <button
-          onClick={() => setMuted((v) => !v)}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${muted ? 'bg-gray-600' : 'bg-gray-700 hover:bg-gray-600'} text-white`}
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-        </button>
-        <button
-          onClick={onEnd}
-          className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white transition-colors shadow-lg"
-        >
-          <svg className="w-7 h-7 rotate-135" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  )
-}
+// CallOverlay is rendered globally via App.tsx / CallProvider
 
 // ─── Main component ────────────────────────────────────────────────────────
 export default function ChatPage() {
@@ -162,7 +96,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [onlineUsers, setOnlineUsers] = useState<Profile[]>([])
   const [message, setMessage] = useState('')
-  const [callType, setCallType] = useState<'audio' | 'video' | null>(null)
+  const { startCall } = useCall()
   const [loadingConvs, setLoadingConvs] = useState(true)
   const [partnerTyping, setPartnerTyping] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -609,9 +543,6 @@ export default function ChatPage() {
 
   return (
     <>
-      {callType && activeConv && (
-        <CallOverlay type={callType} person={activeConv.partner} onEnd={() => setCallType(null)} />
-      )}
 
       {/* Image viewer modal */}
       {viewingImage && (
@@ -963,7 +894,7 @@ export default function ChatPage() {
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => setCallType('audio')}
+                    onClick={() => activeConv && startCall(activeConv.id, activeConv.partner, 'audio')}
                     title="Audio call"
                     className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center text-green-500 transition-colors"
                   >
@@ -972,7 +903,7 @@ export default function ChatPage() {
                     </svg>
                   </button>
                   <button
-                    onClick={() => setCallType('video')}
+                    onClick={() => activeConv && startCall(activeConv.id, activeConv.partner, 'video')}
                     title="Video call"
                     className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-rose-50 hover:bg-rose-100 flex items-center justify-center text-rose-500 transition-colors"
                   >

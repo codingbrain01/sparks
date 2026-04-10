@@ -12,6 +12,8 @@ import ChatPage from './components/ChatPage'
 import ProfilePage from './components/ProfilePage'
 import ExplorePage from './components/ExplorePage'
 import AuthPage from './components/auth/AuthPage'
+import CallOverlay from './components/CallOverlay'
+import { CallProvider } from './context/CallContext'
 import type { Profile } from './lib/types'
 
 // ── Spinner shown while auth state loads ─────────────────────────────────────
@@ -156,7 +158,10 @@ export default function App() {
         <NotificationsProvider>
           <PresenceProvider>
             <MessageNotificationsProvider>
-              <AppContent />
+              <CallProvider>
+                <AppContent />
+                <CallOverlay />
+              </CallProvider>
             </MessageNotificationsProvider>
           </PresenceProvider>
         </NotificationsProvider>
