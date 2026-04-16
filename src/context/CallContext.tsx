@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
-import type { Profile, Gender } from '../lib/types'
+import type { Profile } from '../lib/types'
 
 type CallType = 'audio' | 'video'
 
@@ -10,7 +10,7 @@ export interface IncomingCall {
   callerId: string
   callerName: string
   callerAvatar: string | null
-  callerGender: Gender
+  callerGender: string
   type: CallType
   offer: RTCSessionDescriptionInit
 }
@@ -153,13 +153,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         // Busy — reject immediately
         if (activeCallRef.current || outgoingCallRef.current) {
           const rejCh = supabase.channel(`user-calls:${payload.callerId}`)
-          let rejected = false
           rejCh.subscribe((s) => {
-            if (s === 'SUBSCRIBED' && !rejected) {
-              rejected = true
+            if (s === 'SUBSCRIBED') {
               rejCh.send({ type: 'broadcast', event: 'call-end', payload: { reason: 'busy' } })
-                .then(() => supabase.removeChannel(rejCh))
-                .catch(() => supabase.removeChannel(rejCh))
+              supabase.removeChannel(rejCh)
             }
           })
           return
@@ -255,10 +252,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const newRemote = new MediaStream()
       setRemoteStream(newRemote)
-      pc.ontrack = (e) => {
-        const tracks = e.streams[0] ? e.streams[0].getTracks() : [e.track]
-        tracks.forEach((t) => { if (!newRemote.getTracks().includes(t)) newRemote.addTrack(t) })
-      }
+      pc.ontrack = (e) => e.streams[0].getTracks().forEach((t) => newRemote.addTrack(t))
       pc.onicecandidate = (e) => {
         if (e.candidate) sendSignal('ice-candidate', { candidate: e.candidate.toJSON() })
       }
@@ -302,10 +296,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const newRemote = new MediaStream()
       setRemoteStream(newRemote)
-      pc.ontrack = (e) => {
-        const tracks = e.streams[0] ? e.streams[0].getTracks() : [e.track]
-        tracks.forEach((t) => { if (!newRemote.getTracks().includes(t)) newRemote.addTrack(t) })
-      }
+      pc.ontrack = (e) => e.streams[0].getTracks().forEach((t) => newRemote.addTrack(t))
       pc.onicecandidate = (e) => {
         if (e.candidate) sendSignal('ice-candidate', { candidate: e.candidate.toJSON() })
       }

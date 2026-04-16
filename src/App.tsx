@@ -56,7 +56,7 @@ function AppShell() {
 
   useEffect(() => {
     if (pathname === '/chat') clearUnread()
-  }, [pathname, clearUnread])
+  }, [pathname])
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-linear-to-br from-rose-50 via-fuchsia-50/40 to-violet-50/30">

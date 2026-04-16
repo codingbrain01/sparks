@@ -87,7 +87,7 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
     setLoading(false)
   }
 
-  useEffect(() => { fetchPosts() }, [user?.id])
+  useEffect(() => { fetchPosts() }, [])
 
   const toggleLike = async (postId: number) => {
     const post = posts.find((p) => p.id === postId)

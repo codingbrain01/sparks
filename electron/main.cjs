@@ -28,12 +28,6 @@ function createWindow() {
     },
   })
 
-  // Allow microphone + camera for WebRTC calls (Electron denies by default)
-  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    const allowed = ['media', 'notifications', 'fullscreen', 'clipboard-read', 'clipboard-write']
-    callback(allowed.includes(permission))
-  })
-
   // Strip the menu bar entirely
   Menu.setApplicationMenu(null)
 
@@ -64,7 +58,7 @@ function createWindow() {
   }
 
   // Block reload shortcuts in production (Ctrl+R, F5, Ctrl+Shift+R)
-  // A stray reload on file:// would break HashRouter routing
+  // A stray reload on file:// would break BrowserRouter routing
   if (!isDev) {
     win.webContents.on('before-input-event', (event, input) => {
       const isReload =

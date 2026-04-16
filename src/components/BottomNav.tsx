@@ -49,7 +49,7 @@ export default function BottomNav() {
   const { unreadCount: msgCount } = useMessageNotifications()
 
   return (
-    <nav className="relative z-20 bg-white/80 backdrop-blur-xl border-t border-rose-100/80 shrink-0 shadow-[0_-4px_20px_rgba(244,63,94,0.08)]">
+    <nav className="bg-white/80 backdrop-blur-xl border-t border-rose-100/80 shrink-0 shadow-[0_-4px_20px_rgba(244,63,94,0.08)]">
       <div className="flex justify-around items-center py-2 px-3">
         {tabs.map(({ id, label, icon }) => {
           const active = pathname === `/${id}`

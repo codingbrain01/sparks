@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
@@ -88,7 +88,6 @@ function AudioPlayer({ src, isSender }: { src: string; isSender: boolean }) {
 // ─── Main component ────────────────────────────────────────────────────────
 export default function ChatPage() {
   const location = useLocation()
-  const navigate = useNavigate()
   const chatTarget = (location.state as { chatTarget?: Profile } | null)?.chatTarget ?? null
   const { user } = useAuth()
   const { onlineMap } = usePresence()
@@ -270,12 +269,8 @@ export default function ChatPage() {
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConv.id}` },
         (payload) => {
           const newMsg = payload.new as Message
-          setMessages((prev) => {
-            // Skip if already present (optimistic update already inserted it)
-            if (prev.some((m) => m.id === newMsg.id)) return prev
-            if (newMsg.sender_id !== user?.id) markMessagesRead(activeConv.id)
-            return [...prev, newMsg]
-          })
+          setMessages((prev) => [...prev, newMsg])
+          if (newMsg.sender_id !== user?.id) markMessagesRead(activeConv.id)
         }
       )
       .on(
@@ -325,34 +320,11 @@ export default function ChatPage() {
     if (!message.trim() || !activeConv || !user) return
     const text = message.trim()
     setMessage('')
-
-    // Optimistic update — show immediately without waiting for Realtime
-    const tempId = -Date.now()
-    const tempMsg: Message = {
-      id: tempId,
+    await supabase.from('messages').insert({
       conversation_id: activeConv.id,
       sender_id: user.id,
       content: text,
-      image_url: null,
-      created_at: new Date().toISOString(),
-      read_at: null,
-    }
-    setMessages((prev) => [...prev, tempMsg])
-
-    const { data: newMsg, error } = await supabase
-      .from('messages')
-      .insert({ conversation_id: activeConv.id, sender_id: user.id, content: text })
-      .select()
-      .single()
-
-    if (error || !newMsg) {
-      // Remove temp message if insert failed
-      setMessages((prev) => prev.filter((m) => m.id !== tempId))
-      return
-    }
-
-    // Replace temp message with the real DB record (now has a real id)
-    setMessages((prev) => prev.map((m) => m.id === tempId ? (newMsg as Message) : m))
+    })
   }
 
   // ── Send image / video ───────────────────────────────────────────────────
@@ -539,11 +511,9 @@ export default function ChatPage() {
   useEffect(() => {
     if (!chatTarget) return
     startConversation(chatTarget)
-    // Replace current history entry without chatTarget state so navigating back
-    // here won't re-open the conversation. Must use React Router's navigate so
-    // its internal location cache is updated (replaceState alone doesn't notify it).
-    navigate('/chat', { replace: true })
-  }, [chatTarget?.id])
+    // Clear router state so navigating back to /chat doesn't re-trigger
+    window.history.replaceState({ ...window.history.state, usr: {} }, '')
+  }, [chatTarget])
 
   // ── Compose: fetch all users ──────────────────────────────────────────────
   const openCompose = async () => {

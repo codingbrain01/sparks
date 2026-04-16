@@ -62,7 +62,7 @@ export default function Sidebar() {
 
   return (
     <>
-    <aside className="relative z-20 hidden md:flex flex-col w-16 lg:w-60 h-full bg-white/70 backdrop-blur-xl border-r border-rose-100/60 shrink-0 shadow-[4px_0_20px_rgba(244,63,94,0.06)]">
+    <aside className="hidden md:flex flex-col w-16 lg:w-60 h-full bg-white/70 backdrop-blur-xl border-r border-rose-100/60 shrink-0 shadow-[4px_0_20px_rgba(244,63,94,0.06)]">
 
       {/* Logo */}
       <div className="h-16 flex items-center px-4 border-b border-rose-100/60 shrink-0 gap-2">
