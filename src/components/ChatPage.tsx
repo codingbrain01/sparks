@@ -513,7 +513,7 @@ export default function ChatPage() {
     startConversation(chatTarget)
     // Clear router state so navigating back to /chat doesn't re-trigger
     window.history.replaceState({ ...window.history.state, usr: {} }, '')
-  }, [chatTarget])
+  }, [chatTarget?.id])
 
   // ── Compose: fetch all users ──────────────────────────────────────────────
   const openCompose = async () => {

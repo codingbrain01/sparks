@@ -149,12 +149,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   }, [user])
 
   const setMyStatus = async (status: UserStatus) => {
+    if (!user) return
     intentionalStatusRef.current = status
     myStatusRef.current = status
     setMyStatusState(status)
     await channelRef.current?.track({ status })
     // DB write triggers the cross-device sync listener on other devices
-    await supabase.from('profiles').update({ status }).eq('id', user!.id)
+    await supabase.from('profiles').update({ status }).eq('id', user.id)
   }
 
   return (

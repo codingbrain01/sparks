@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
-import type { Profile } from '../lib/types'
+import type { Profile, Gender } from '../lib/types'
 
 type CallType = 'audio' | 'video'
 
@@ -10,7 +10,7 @@ export interface IncomingCall {
   callerId: string
   callerName: string
   callerAvatar: string | null
-  callerGender: string
+  callerGender: Gender
   type: CallType
   offer: RTCSessionDescriptionInit
 }
@@ -153,10 +153,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         // Busy — reject immediately
         if (activeCallRef.current || outgoingCallRef.current) {
           const rejCh = supabase.channel(`user-calls:${payload.callerId}`)
+          let rejected = false
           rejCh.subscribe((s) => {
-            if (s === 'SUBSCRIBED') {
+            if (s === 'SUBSCRIBED' && !rejected) {
+              rejected = true
               rejCh.send({ type: 'broadcast', event: 'call-end', payload: { reason: 'busy' } })
-              supabase.removeChannel(rejCh)
+                .then(() => supabase.removeChannel(rejCh))
+                .catch(() => supabase.removeChannel(rejCh))
             }
           })
           return

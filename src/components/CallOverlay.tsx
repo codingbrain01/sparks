@@ -119,7 +119,7 @@ export default function CallOverlay() {
             <Avatar
               firstName={incomingCall.callerName.split(' ')[0]}
               lastName={incomingCall.callerName.split(' ')[1] ?? ''}
-              gender={incomingCall.callerGender as any}
+              gender={incomingCall.callerGender}
               avatarUrl={incomingCall.callerAvatar}
               className="w-28 h-28 rounded-full shadow-2xl relative"
               textClassName="text-4xl font-bold"
