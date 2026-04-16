@@ -43,6 +43,66 @@ export default function CallOverlay() {
     return () => clearInterval(iv)
   }, [activeCall])
 
+  // Ringtone — Web Audio oscillator. Incoming: dual-tone bell.
+  // Outgoing: ringback (1s on / 3s off). Stops on activeCall or dismissal.
+  useEffect(() => {
+    if (activeCall) return
+    if (!incomingCall && !outgoingCall) return
+
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const gain = ctx.createGain()
+    gain.gain.value = 0
+    gain.connect(ctx.destination)
+
+    let stopped = false
+    const oscillators: OscillatorNode[] = []
+
+    const playTone = (freq: number, duration: number) => {
+      if (stopped) return
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      osc.connect(gain)
+      osc.start()
+      oscillators.push(osc)
+      gain.gain.setValueAtTime(0.15, ctx.currentTime)
+      gain.gain.setValueAtTime(0, ctx.currentTime + duration)
+      osc.stop(ctx.currentTime + duration)
+      osc.onended = () => {
+        osc.disconnect()
+        const i = oscillators.indexOf(osc)
+        if (i >= 0) oscillators.splice(i, 1)
+      }
+    }
+
+    let timer: ReturnType<typeof setTimeout>
+    if (incomingCall) {
+      const ringLoop = () => {
+        if (stopped) return
+        playTone(800, 0.4)
+        setTimeout(() => !stopped && playTone(1000, 0.4), 450)
+        timer = setTimeout(ringLoop, 1500)
+      }
+      ringLoop()
+    } else if (outgoingCall) {
+      const ringbackLoop = () => {
+        if (stopped) return
+        playTone(440, 1)
+        timer = setTimeout(ringbackLoop, 4000)
+      }
+      ringbackLoop()
+    }
+
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+      oscillators.forEach((o) => { try { o.stop() } catch {} })
+      ctx.close().catch(() => {})
+    }
+  }, [incomingCall, outgoingCall, activeCall])
+
   if (!incomingCall && !outgoingCall && !activeCall) return null
 
   // ── Incoming call ──────────────────────────────────────────────────────────
@@ -56,7 +116,7 @@ export default function CallOverlay() {
             <Avatar
               firstName={incomingCall.callerName.split(' ')[0]}
               lastName={incomingCall.callerName.split(' ')[1] ?? ''}
-              gender={incomingCall.callerGender as any}
+              gender={incomingCall.callerGender}
               avatarUrl={incomingCall.callerAvatar}
               className="w-28 h-28 rounded-full shadow-2xl relative"
               textClassName="text-4xl font-bold"
@@ -156,12 +216,13 @@ export default function CallOverlay() {
 
   // ── Active call ───────────────────────────────────────────────────────────
   if (activeCall) {
+    const isVideo = activeCall.type === 'video'
     return (
-      <div className="fixed inset-0 z-60 bg-gray-900 flex flex-col">
+      <div className={`fixed inset-0 z-60 ${isVideo ? 'bg-black' : 'bg-gray-900 flex flex-col'}`}>
 
         {/* Video call layout */}
-        {activeCall.type === 'video' ? (
-          <div className="relative flex-1 bg-black">
+        {isVideo ? (
+          <>
             {/* Remote video — fullscreen */}
             <VideoEl
               stream={remoteStream}
@@ -180,7 +241,7 @@ export default function CallOverlay() {
               </p>
               <p className="text-gray-300 text-xs">{fmtTime(elapsed)}</p>
             </div>
-          </div>
+          </>
         ) : (
           /* Audio call layout */
           <div className="flex-1 flex flex-col items-center justify-center gap-6">
@@ -201,8 +262,12 @@ export default function CallOverlay() {
           </div>
         )}
 
-        {/* Controls */}
-        <div className="flex items-center justify-center gap-6 py-10 bg-gray-900 shrink-0">
+        {/* Controls — overlay for video, normal flow for audio */}
+        <div className={`flex items-center justify-center gap-6 ${
+          isVideo
+            ? 'absolute bottom-0 left-0 right-0 pb-10 pt-16 bg-linear-to-t from-black/90 via-black/60 to-transparent'
+            : 'py-10 bg-gray-900 shrink-0'
+        }`}>
           {/* Mute */}
           <div className="flex flex-col items-center gap-1.5">
             <button
