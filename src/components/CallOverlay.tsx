@@ -48,7 +48,7 @@ export default function CallOverlay() {
   // ── Incoming call ──────────────────────────────────────────────────────────
   if (incomingCall) {
     return (
-      <div className="fixed inset-0 z-[60] bg-gray-900/98 flex flex-col items-center justify-between py-20 px-6">
+      <div className="fixed inset-0 z-60 bg-gray-900/98 flex flex-col items-center justify-between py-20 px-6">
         {/* Caller info */}
         <div className="flex flex-col items-center gap-5 mt-8">
           <div className="relative">
@@ -116,7 +116,7 @@ export default function CallOverlay() {
   // ── Outgoing call (ringing) ────────────────────────────────────────────────
   if (outgoingCall) {
     return (
-      <div className="fixed inset-0 z-[60] bg-gray-900/98 flex flex-col items-center justify-between py-20 px-6">
+      <div className="fixed inset-0 z-60 bg-gray-900/98 flex flex-col items-center justify-between py-20 px-6">
         <div className="flex flex-col items-center gap-5 mt-8">
           <div className="relative">
             <div className="absolute inset-0 rounded-full bg-green-500/20 animate-ping scale-110" />
@@ -157,7 +157,7 @@ export default function CallOverlay() {
   // ── Active call ───────────────────────────────────────────────────────────
   if (activeCall) {
     return (
-      <div className="fixed inset-0 z-[60] bg-gray-900 flex flex-col">
+      <div className="fixed inset-0 z-60 bg-gray-900 flex flex-col">
 
         {/* Video call layout */}
         {activeCall.type === 'video' ? (
