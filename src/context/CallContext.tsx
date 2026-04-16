@@ -255,7 +255,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const newRemote = new MediaStream()
       setRemoteStream(newRemote)
-      pc.ontrack = (e) => e.streams[0].getTracks().forEach((t) => newRemote.addTrack(t))
+      pc.ontrack = (e) => {
+        const tracks = e.streams[0] ? e.streams[0].getTracks() : [e.track]
+        tracks.forEach((t) => { if (!newRemote.getTracks().includes(t)) newRemote.addTrack(t) })
+      }
       pc.onicecandidate = (e) => {
         if (e.candidate) sendSignal('ice-candidate', { candidate: e.candidate.toJSON() })
       }
@@ -299,7 +302,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const newRemote = new MediaStream()
       setRemoteStream(newRemote)
-      pc.ontrack = (e) => e.streams[0].getTracks().forEach((t) => newRemote.addTrack(t))
+      pc.ontrack = (e) => {
+        const tracks = e.streams[0] ? e.streams[0].getTracks() : [e.track]
+        tracks.forEach((t) => { if (!newRemote.getTracks().includes(t)) newRemote.addTrack(t) })
+      }
       pc.onicecandidate = (e) => {
         if (e.candidate) sendSignal('ice-candidate', { candidate: e.candidate.toJSON() })
       }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
@@ -88,6 +88,7 @@ function AudioPlayer({ src, isSender }: { src: string; isSender: boolean }) {
 // ─── Main component ────────────────────────────────────────────────────────
 export default function ChatPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const chatTarget = (location.state as { chatTarget?: Profile } | null)?.chatTarget ?? null
   const { user } = useAuth()
   const { onlineMap } = usePresence()
@@ -538,8 +539,10 @@ export default function ChatPage() {
   useEffect(() => {
     if (!chatTarget) return
     startConversation(chatTarget)
-    // Clear router state so navigating back to /chat doesn't re-trigger
-    window.history.replaceState({ ...window.history.state, usr: {} }, '')
+    // Replace current history entry without chatTarget state so navigating back
+    // here won't re-open the conversation. Must use React Router's navigate so
+    // its internal location cache is updated (replaceState alone doesn't notify it).
+    navigate('/chat', { replace: true })
   }, [chatTarget?.id])
 
   // ── Compose: fetch all users ──────────────────────────────────────────────

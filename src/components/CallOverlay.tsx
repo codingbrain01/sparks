@@ -89,10 +89,12 @@ export default function CallOverlay() {
 
   const toggleSpeaker = () => setIsSpeakerOff((v) => !v)
 
-  // Attach remote stream to a hidden audio element — works for both audio and video calls
+  // Attach remote stream to the hidden audio element.
+  // Must depend on activeCall too: the <audio> element only mounts once activeCall
+  // is truthy, so if remoteStream was set earlier we need to re-run when it mounts.
   useEffect(() => {
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remoteStream
-  }, [remoteStream])
+  }, [remoteStream, activeCall])
 
   // Ring on incoming call
   useRingtone(!!incomingCall)
