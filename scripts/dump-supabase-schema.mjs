@@ -7,7 +7,7 @@ import { writeFileSync } from 'node:fs'
 
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN
 const REF = process.env.SUPABASE_PROJECT_REF
-const OUT = process.argv[2] ?? 'supabase/schema_remote.sql'
+const OUT = process.argv[2] ?? 'supabase/schema.sql'
 
 if (!TOKEN || !REF) {
   console.error('SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_REF env vars required')

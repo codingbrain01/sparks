@@ -1,153 +1,322 @@
--- ============================================================
--- Sparks Dating App — Supabase Schema
--- Paste this into: Supabase Dashboard → SQL Editor → Run
--- ============================================================
+-- Sparks Supabase remote schema dump
+-- Project: ejswfqjgfepizehzrsqr
+-- Generated: 2026-04-27T16:46:52.347Z
+-- Source: Supabase Management API (no DB password used)
+-- Note: Schemas auth/storage/realtime managed by Supabase are not included.
+--       Run blocks in order. Idempotency is best-effort.
 
--- ─── Tables ────────────────────────────────────────────────
+-- ──────────────────────────────────────────────────────────────────────
+-- Extensions
+-- ──────────────────────────────────────────────────────────────────────
 
-CREATE TABLE IF NOT EXISTS profiles (
-  id          UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  username    TEXT UNIQUE NOT NULL,
-  first_name  TEXT NOT NULL DEFAULT '',
-  last_name   TEXT NOT NULL DEFAULT '',
-  age         INTEGER NOT NULL DEFAULT 18 CHECK (age >= 18 AND age <= 100),
-  looking_for TEXT NOT NULL DEFAULT 'Women' CHECK (looking_for IN ('Men', 'Women')),
-  bio         TEXT DEFAULT '',
-  hobbies     TEXT[] DEFAULT '{}',
-  avatar_url  TEXT,
-  online      BOOLEAN DEFAULT FALSE,
-  created_at  TIMESTAMPTZ DEFAULT NOW()
+CREATE EXTENSION IF NOT EXISTS pg_graphql WITH SCHEMA graphql;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Enum types
+-- ──────────────────────────────────────────────────────────────────────
+
+
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Sequences
+-- ──────────────────────────────────────────────────────────────────────
+
+CREATE SEQUENCE IF NOT EXISTS public.connections_id_seq AS bigint START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS public.conversations_id_seq AS bigint START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS public.messages_id_seq AS bigint START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS public.post_comments_id_seq AS bigint START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS public.post_likes_id_seq AS bigint START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS public.posts_id_seq AS bigint START WITH 1 INCREMENT BY 1;
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Tables
+-- ──────────────────────────────────────────────────────────────────────
+
+CREATE TABLE public.calls (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  conversation_id integer,
+  caller_id uuid,
+  callee_id uuid,
+  type text NOT NULL,
+  status text NOT NULL,
+  duration_seconds integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS posts (
-  id         BIGSERIAL PRIMARY KEY,
-  user_id    UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  content    TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE public.connections (
+  id bigint DEFAULT nextval('connections_id_seq'::regclass) NOT NULL,
+  requester_id uuid NOT NULL,
+  addressee_id uuid NOT NULL,
+  status text DEFAULT 'pending'::text NOT NULL,
+  created_at timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS post_likes (
-  id         BIGSERIAL PRIMARY KEY,
-  post_id    BIGINT REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
-  user_id    UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (post_id, user_id)
+CREATE TABLE public.conversation_participants (
+  conversation_id bigint NOT NULL,
+  user_id uuid NOT NULL,
+  hidden boolean DEFAULT false NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS conversations (
-  id         BIGSERIAL PRIMARY KEY,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE public.conversations (
+  id bigint DEFAULT nextval('conversations_id_seq'::regclass) NOT NULL,
+  updated_at timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS conversation_participants (
-  conversation_id BIGINT REFERENCES conversations(id) ON DELETE CASCADE,
-  user_id         UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  PRIMARY KEY (conversation_id, user_id)
+CREATE TABLE public.messages (
+  id bigint DEFAULT nextval('messages_id_seq'::regclass) NOT NULL,
+  conversation_id bigint NOT NULL,
+  sender_id uuid NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  read_at timestamp with time zone,
+  image_url text
 );
 
-CREATE TABLE IF NOT EXISTS messages (
-  id              BIGSERIAL PRIMARY KEY,
-  conversation_id BIGINT REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
-  sender_id       UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  content         TEXT NOT NULL,
-  created_at      TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE public.post_comments (
+  id bigint DEFAULT nextval('post_comments_id_seq'::regclass) NOT NULL,
+  post_id bigint NOT NULL,
+  user_id uuid NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone DEFAULT now()
 );
 
--- ─── Triggers ──────────────────────────────────────────────
+CREATE TABLE public.post_likes (
+  id bigint DEFAULT nextval('post_likes_id_seq'::regclass) NOT NULL,
+  post_id bigint NOT NULL,
+  user_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now()
+);
 
--- Auto-create profile row when a user signs up
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+CREATE TABLE public.posts (
+  id bigint DEFAULT nextval('posts_id_seq'::regclass) NOT NULL,
+  user_id uuid NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  privacy text DEFAULT 'public'::text NOT NULL
+);
+
+CREATE TABLE public.profile_photos (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  url text NOT NULL,
+  order_index integer DEFAULT 0 NOT NULL,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  username text NOT NULL,
+  first_name text DEFAULT ''::text NOT NULL,
+  last_name text DEFAULT ''::text NOT NULL,
+  age integer DEFAULT 18 NOT NULL,
+  looking_for text DEFAULT 'Women'::text NOT NULL,
+  bio text DEFAULT ''::text,
+  hobbies text[] DEFAULT '{}'::text[],
+  avatar_url text,
+  online boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  status character varying(20) DEFAULT 'online'::character varying NOT NULL,
+  gender character varying(20) DEFAULT 'Man'::character varying NOT NULL
+);
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Constraints (PK, FK, unique, check)
+-- ──────────────────────────────────────────────────────────────────────
+
+ALTER TABLE public.calls ADD CONSTRAINT calls_pkey PRIMARY KEY (id);
+ALTER TABLE public.connections ADD CONSTRAINT connections_pkey PRIMARY KEY (id);
+ALTER TABLE public.conversation_participants ADD CONSTRAINT conversation_participants_pkey PRIMARY KEY (conversation_id, user_id);
+ALTER TABLE public.conversations ADD CONSTRAINT conversations_pkey PRIMARY KEY (id);
+ALTER TABLE public.messages ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
+ALTER TABLE public.post_comments ADD CONSTRAINT post_comments_pkey PRIMARY KEY (id);
+ALTER TABLE public.post_likes ADD CONSTRAINT post_likes_pkey PRIMARY KEY (id);
+ALTER TABLE public.posts ADD CONSTRAINT posts_pkey PRIMARY KEY (id);
+ALTER TABLE public.profile_photos ADD CONSTRAINT profile_photos_pkey PRIMARY KEY (id);
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
+ALTER TABLE public.connections ADD CONSTRAINT connections_requester_id_addressee_id_key UNIQUE (requester_id, addressee_id);
+ALTER TABLE public.post_likes ADD CONSTRAINT post_likes_post_id_user_id_key UNIQUE (post_id, user_id);
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_username_key UNIQUE (username);
+ALTER TABLE public.calls ADD CONSTRAINT calls_status_check CHECK ((status = ANY (ARRAY['missed'::text, 'declined'::text, 'ended'::text])));
+ALTER TABLE public.calls ADD CONSTRAINT calls_type_check CHECK ((type = ANY (ARRAY['audio'::text, 'video'::text])));
+ALTER TABLE public.connections ADD CONSTRAINT connections_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'accepted'::text, 'rejected'::text])));
+ALTER TABLE public.posts ADD CONSTRAINT posts_privacy_check CHECK ((privacy = ANY (ARRAY['public'::text, 'friends'::text, 'private'::text])));
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_age_check CHECK (((age >= 18) AND (age <= 100)));
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_looking_for_check CHECK ((looking_for = ANY (ARRAY['Men'::text, 'Women'::text])));
+ALTER TABLE public.calls ADD CONSTRAINT calls_callee_id_fkey FOREIGN KEY (callee_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.calls ADD CONSTRAINT calls_caller_id_fkey FOREIGN KEY (caller_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.calls ADD CONSTRAINT calls_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
+ALTER TABLE public.connections ADD CONSTRAINT connections_addressee_id_fkey FOREIGN KEY (addressee_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.connections ADD CONSTRAINT connections_requester_id_fkey FOREIGN KEY (requester_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.conversation_participants ADD CONSTRAINT conversation_participants_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
+ALTER TABLE public.conversation_participants ADD CONSTRAINT conversation_participants_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.messages ADD CONSTRAINT messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
+ALTER TABLE public.messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.post_comments ADD CONSTRAINT post_comments_post_id_fkey FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+ALTER TABLE public.post_comments ADD CONSTRAINT post_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.post_likes ADD CONSTRAINT post_likes_post_id_fkey FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+ALTER TABLE public.post_likes ADD CONSTRAINT post_likes_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.posts ADD CONSTRAINT posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.profile_photos ADD CONSTRAINT profile_photos_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Indexes (non-PK, non-unique)
+-- ──────────────────────────────────────────────────────────────────────
+
+
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Functions / procedures
+-- ──────────────────────────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION public.delete_own_account()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 BEGIN
-  INSERT INTO profiles (id, username, first_name, last_name, age, looking_for)
+  DELETE FROM auth.users WHERE id = auth.uid();
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+  INSERT INTO public.profiles (id, username, first_name, last_name, age, gender, looking_for)
   VALUES (
     NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'username', 'user_' || LEFT(NEW.id::TEXT, 8)),
-    COALESCE(NEW.raw_user_meta_data->>'first_name', ''),
-    COALESCE(NEW.raw_user_meta_data->>'last_name', ''),
-    COALESCE((NEW.raw_user_meta_data->>'age')::INTEGER, 18),
-    COALESCE(NEW.raw_user_meta_data->>'looking_for', 'Women')
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'username', ''), 'user_' || substring(NEW.id::text, 1, 8)),
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'first_name', ''), ''),
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'last_name', ''), ''),
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'age', '')::integer, 18),
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'gender', ''), 'Man'),
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'looking_for', ''), 'Women')
   )
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE LOG 'handle_new_user failed: %', SQLERRM;
+    RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$function$
+;
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-
--- Keep conversations.updated_at fresh when messages are inserted
-CREATE OR REPLACE FUNCTION update_conversation_timestamp()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.update_conversation_timestamp()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
 BEGIN
   UPDATE conversations SET updated_at = NOW() WHERE id = NEW.conversation_id;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$function$
+;
 
-DROP TRIGGER IF EXISTS on_message_inserted ON messages;
-CREATE TRIGGER on_message_inserted
-  AFTER INSERT ON messages
-  FOR EACH ROW EXECUTE FUNCTION update_conversation_timestamp();
 
--- ─── Row Level Security ─────────────────────────────────────
+-- ──────────────────────────────────────────────────────────────────────
+-- Triggers
+-- ──────────────────────────────────────────────────────────────────────
 
-ALTER TABLE profiles                ENABLE ROW LEVEL SECURITY;
-ALTER TABLE posts                   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE post_likes              ENABLE ROW LEVEL SECURITY;
-ALTER TABLE conversations           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE messages                ENABLE ROW LEVEL SECURITY;
+CREATE TRIGGER on_message_inserted AFTER INSERT ON messages FOR EACH ROW EXECUTE FUNCTION update_conversation_timestamp();
 
--- profiles
-CREATE POLICY "Profiles viewable by authenticated users"
-  ON profiles FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Users can update own profile"
-  ON profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
 
--- posts
-CREATE POLICY "Posts viewable by authenticated users"
-  ON posts FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Users can create posts"
-  ON posts FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete own posts"
-  ON posts FOR DELETE TO authenticated USING (auth.uid() = user_id);
+-- ──────────────────────────────────────────────────────────────────────
+-- Views
+-- ──────────────────────────────────────────────────────────────────────
 
--- post_likes
-CREATE POLICY "Likes viewable by authenticated users"
-  ON post_likes FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Users can add own likes"
-  ON post_likes FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can remove own likes"
-  ON post_likes FOR DELETE TO authenticated USING (auth.uid() = user_id);
+-- (none)
 
--- conversations
-CREATE POLICY "Participants can view their conversations"
-  ON conversations FOR SELECT TO authenticated
-  USING (id IN (SELECT conversation_id FROM conversation_participants WHERE user_id = auth.uid()));
-CREATE POLICY "Authenticated users can create conversations"
-  ON conversations FOR INSERT TO authenticated WITH CHECK (true);
 
--- conversation_participants
-CREATE POLICY "Participants viewable by authenticated users"
-  ON conversation_participants FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Users can join conversations"
-  ON conversation_participants FOR INSERT TO authenticated WITH CHECK (true);
+-- ──────────────────────────────────────────────────────────────────────
+-- Row-Level Security
+-- ──────────────────────────────────────────────────────────────────────
 
--- messages
-CREATE POLICY "Participants can view messages"
-  ON messages FOR SELECT TO authenticated
-  USING (conversation_id IN (SELECT conversation_id FROM conversation_participants WHERE user_id = auth.uid()));
-CREATE POLICY "Participants can send messages"
-  ON messages FOR INSERT TO authenticated
-  WITH CHECK (
-    auth.uid() = sender_id AND
-    conversation_id IN (SELECT conversation_id FROM conversation_participants WHERE user_id = auth.uid())
-  );
+ALTER TABLE public.calls ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.post_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.post_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profile_photos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- ─── Realtime ───────────────────────────────────────────────
+CREATE POLICY "Caller can insert" ON public.calls AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.uid() = caller_id));
+CREATE POLICY "Participants can update" ON public.calls AS PERMISSIVE FOR UPDATE TO public USING (((auth.uid() = caller_id) OR (auth.uid() = callee_id)));
+CREATE POLICY "Participants can view their calls" ON public.calls AS PERMISSIVE FOR SELECT TO public USING (((auth.uid() = caller_id) OR (auth.uid() = callee_id)));
+CREATE POLICY "Users can delete connections" ON public.connections AS PERMISSIVE FOR DELETE TO authenticated USING (((auth.uid() = requester_id) OR (auth.uid() = addressee_id)));
+CREATE POLICY "Users can send connection requests" ON public.connections AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = requester_id));
+CREATE POLICY "Users can update connection status" ON public.connections AS PERMISSIVE FOR UPDATE TO authenticated USING ((auth.uid() = addressee_id));
+CREATE POLICY "Users can view their connections" ON public.connections AS PERMISSIVE FOR SELECT TO authenticated USING (((auth.uid() = requester_id) OR (auth.uid() = addressee_id)));
+CREATE POLICY "Participants viewable by authenticated users" ON public.conversation_participants AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Users can add conversation participants" ON public.conversation_participants AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users can join conversations" ON public.conversation_participants AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users can update own participant row" ON public.conversation_participants AS PERMISSIVE FOR UPDATE TO public USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+CREATE POLICY "Authenticated users can create conversations" ON public.conversations AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Participants can delete conversations" ON public.conversations AS PERMISSIVE FOR DELETE TO public USING ((id IN ( SELECT conversation_participants.conversation_id
+   FROM conversation_participants
+  WHERE (conversation_participants.user_id = auth.uid()))));
+CREATE POLICY "Participants can view their conversations" ON public.conversations AS PERMISSIVE FOR SELECT TO authenticated USING ((id IN ( SELECT conversation_participants.conversation_id
+   FROM conversation_participants
+  WHERE (conversation_participants.user_id = auth.uid()))));
+CREATE POLICY "Users can view their conversations" ON public.conversations AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Participants can send messages" ON public.messages AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((auth.uid() = sender_id) AND (conversation_id IN ( SELECT conversation_participants.conversation_id
+   FROM conversation_participants
+  WHERE (conversation_participants.user_id = auth.uid())))));
+CREATE POLICY "Participants can view messages" ON public.messages AS PERMISSIVE FOR SELECT TO authenticated USING ((conversation_id IN ( SELECT conversation_participants.conversation_id
+   FROM conversation_participants
+  WHERE (conversation_participants.user_id = auth.uid()))));
+CREATE POLICY "Comments viewable by authenticated users" ON public.post_comments AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Users can create comments" ON public.post_comments AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY "Users can delete own comments" ON public.post_comments AS PERMISSIVE FOR DELETE TO authenticated USING ((auth.uid() = user_id));
+CREATE POLICY "Likes viewable by authenticated users" ON public.post_likes AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Users can add own likes" ON public.post_likes AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY "Users can remove own likes" ON public.post_likes AS PERMISSIVE FOR DELETE TO authenticated USING ((auth.uid() = user_id));
+CREATE POLICY "Posts viewable based on privacy" ON public.posts AS PERMISSIVE FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR (privacy = 'public'::text) OR ((privacy = 'friends'::text) AND (EXISTS ( SELECT 1
+   FROM connections
+  WHERE ((connections.status = 'accepted'::text) AND (((connections.requester_id = auth.uid()) AND (connections.addressee_id = posts.user_id)) OR ((connections.addressee_id = auth.uid()) AND (connections.requester_id = posts.user_id)))))))));
+CREATE POLICY "Users can create posts" ON public.posts AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY "Users can delete own posts" ON public.posts AS PERMISSIVE FOR DELETE TO authenticated USING ((auth.uid() = user_id));
+CREATE POLICY "Users can update own posts" ON public.posts AS PERMISSIVE FOR UPDATE TO authenticated USING ((auth.uid() = user_id));
+CREATE POLICY "Anyone can view profile photos" ON public.profile_photos AS PERMISSIVE FOR SELECT TO public USING (true);
+CREATE POLICY "Users can delete their own photos" ON public.profile_photos AS PERMISSIVE FOR DELETE TO public USING ((auth.uid() = user_id));
+CREATE POLICY "Users can insert their own photos" ON public.profile_photos AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY "Users can update their own photos" ON public.profile_photos AS PERMISSIVE FOR UPDATE TO public USING ((auth.uid() = user_id));
+CREATE POLICY "Profiles viewable by authenticated users" ON public.profiles AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Users can insert own profile" ON public.profiles AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = id));
+CREATE POLICY "Users can update own profile" ON public.profiles AS PERMISSIVE FOR UPDATE TO authenticated USING ((auth.uid() = id));
 
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE posts;
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Realtime publication
+-- ──────────────────────────────────────────────────────────────────────
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.connections;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.posts;
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Storage buckets
+-- ──────────────────────────────────────────────────────────────────────
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('avatars', 'avatars', 'true', NULL, NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('chat-images', 'chat-images', 'true', '26214400', NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('gallery', 'gallery', 'true', '26214400', NULL) ON CONFLICT (id) DO NOTHING;
