@@ -18,6 +18,10 @@ dist-ssr
 
 release
 
+# Supabase CLI scratch dirs
+supabase/.temp
+supabase/.branches
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
