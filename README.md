@@ -68,50 +68,150 @@
 
 ## Getting Started
 
-### Prerequisites
+### Tools you'll need
 
-- Node.js 18+
-- A [Supabase](https://supabase.com) project with:
-  - `profiles`, `connections`, `conversations`, `conversation_participants`, `messages`, `posts`, `post_comments`, `post_likes` tables
-  - `messages` table requires `read_at TIMESTAMPTZ` and `image_url TEXT` columns
-  - A public `avatars` storage bucket for profile photos
-  - A public `chat-images` storage bucket for chat image/video/voice uploads
-  - A public `gallery` storage bucket for profile photo galleries
-  - `profile_photos` table with `user_id`, `url`, `order_index`, `created_at`
-  - RLS policies for authenticated reads/writes on all buckets
+| Tool | What for | Where |
+|---|---|---|
+| **Node.js 18+** | Runtime + npm | https://nodejs.org |
+| **Git** | Clone the repo | https://git-scm.com |
+| **Supabase account** | Database, auth, realtime, storage | https://supabase.com |
+| **Metered.ca account** | TURN server for calls (optional but recommended) | https://metered.ca |
 
-### Setup
+### Step 1 — Clone and install
 
 ```bash
-# Install dependencies
+git clone https://github.com/codingbrain01/sparks.git
+cd sparks
 npm install
-
-# Add your Supabase credentials
-cp .env.example .env
-# Fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 ```
 
-### Development
+### Step 2 — Create a Supabase project
+
+1. Go to https://supabase.com/dashboard and click **New project**.
+2. Pick a name, a strong **database password** (save it — you'll need it for backups), and the closest region.
+3. Wait ~2 minutes for the project to provision.
+
+### Step 3 — Apply the schema
+
+The repo includes a complete schema dump that creates every table, sequence, constraint, RLS policy, function, trigger, and storage bucket the app needs.
+
+1. In your Supabase dashboard, open **SQL Editor → New query**.
+2. Copy the entire contents of [supabase/schema.sql](supabase/schema.sql) and paste it in.
+3. Click **Run**. You should see no errors.
+
+This creates 10 tables (`profiles`, `connections`, `conversations`, `conversation_participants`, `messages`, `posts`, `post_comments`, `post_likes`, `profile_photos`, `calls`), 34 RLS policies, the realtime publication, and the three storage buckets (`avatars`, `chat-images`, `gallery`).
+
+### Step 4 — Add storage RLS policies
+
+The schema dump only covers the `public` schema. Storage object policies live in `storage.objects` and need to be added separately. In the SQL Editor, run:
+
+```sql
+-- Allow authenticated users to upload to any of the three buckets
+create policy "Authenticated uploads" on storage.objects
+  for insert to authenticated
+  with check (bucket_id in ('avatars', 'chat-images', 'gallery'));
+
+-- Allow authenticated users to update their own files
+create policy "Authenticated updates" on storage.objects
+  for update to authenticated
+  using (auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Allow authenticated users to delete their own files
+create policy "Authenticated deletes" on storage.objects
+  for delete to authenticated
+  using (auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Public reads (the buckets are already marked public, this is redundant but explicit)
+create policy "Public reads" on storage.objects
+  for select using (bucket_id in ('avatars', 'chat-images', 'gallery'));
+```
+
+### Step 5 — Verify Realtime is on
+
+In **Database → Publications → `supabase_realtime`**, confirm these tables are checked:
+
+- `messages`
+- `calls`
+- `conversations`
+
+The schema includes them already, so this is just a sanity check. If any are missing, toggle them on.
+
+### Step 6 — (Optional) Set up TURN for calls
+
+Without TURN, calls work for users on the same network or with friendly NATs but fail for ~30% of real-world cases. To fix that:
+
+1. Sign up at https://metered.ca (free tier includes 50GB/month, plenty for testing).
+2. **Apps → Create New App → TURN Server**. Give it a slug like `sparks-turn`.
+3. After creating, you'll see two values you need:
+   - **API Key** (looks like `abc123...`)
+   - **App Name** (the slug — `sparks-turn` in this example)
+
+If you skip this, the app falls back to Google's public STUN servers and most calls will still connect, but strict-NAT users won't.
+
+### Step 7 — Configure auth
+
+Default email/password auth is enabled out of the box. For local development:
+
+1. **Authentication → Providers → Email**: confirm enabled.
+2. **Authentication → URL Configuration → Site URL**: set to `http://localhost:5173` for dev.
+3. **Authentication → Email Templates**: optionally customize. For testing, you may want to **disable email confirmation** at **Authentication → Providers → Email → "Confirm email"** so signup works without checking inbox.
+
+For production, set **Site URL** to your real domain and add it to **Redirect URLs**.
+
+### Step 8 — Fill in `.env`
 
 ```bash
-# Web (browser)
+cp .env.example .env
+```
+
+Open `.env` and fill in:
+
+- `VITE_SUPABASE_URL` — from **Project Settings → API → Project URL**
+- `VITE_SUPABASE_ANON_KEY` — from **Project Settings → API → anon public** (not the service_role key)
+- `VITE_METERED_API_KEY` — from your Metered dashboard (skip if you skipped step 6)
+- `VITE_METERED_APP_NAME` — the slug from step 6 (skip if you skipped step 6)
+
+### Step 9 — Run it
+
+```bash
+# Web (browser at http://localhost:5173)
 npm run dev
 
-# Desktop (Electron)
+# Desktop (Electron window)
 npm run electron:dev
 ```
 
-### Build
+Sign up with any email + password, complete the 3-step onboarding, and you're in.
+
+---
+
+## Build
 
 ```bash
-# Web
+# Web bundle (output: dist/)
 npm run build
 
-# Desktop installer
+# Desktop installer (output: release/)
 npm run electron:build
 ```
 
 > **Web production note:** configure your server to redirect all routes to `index.html` (e.g. Netlify `_redirects`, Vercel rewrites) for client-side routing to work on refresh.
+
+---
+
+## Refreshing the schema
+
+If you change the database via the Supabase dashboard, regenerate [supabase/schema.sql](supabase/schema.sql) so the repo stays in sync:
+
+```bash
+# Get a personal access token from https://supabase.com/dashboard/account/tokens
+export SUPABASE_ACCESS_TOKEN=sbp_...
+export SUPABASE_PROJECT_REF=your-project-ref
+
+node scripts/dump-supabase-schema.mjs
+```
+
+The script uses the Supabase Management API — no DB password required.
 
 ---
 
