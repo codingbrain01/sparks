@@ -17,6 +17,17 @@ function VideoEl({
   return <video ref={ref} autoPlay playsInline muted={!!muted} className={className} />
 }
 
+// Attaches a MediaStream's audio tracks to a hidden <audio> element so they
+// reach the speakers. Audio calls have no <video> element, so without this
+// the remote audio tracks sit in the stream and are never played.
+function AudioEl({ stream }: { stream: MediaStream | null }) {
+  const ref = useRef<HTMLAudioElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.srcObject = stream
+  }, [stream])
+  return <audio ref={ref} autoPlay />
+}
+
 function fmtTime(s: number) {
   const m = Math.floor(s / 60)
   const sec = s % 60
@@ -245,6 +256,7 @@ export default function CallOverlay() {
         ) : (
           /* Audio call layout */
           <div className="flex-1 flex flex-col items-center justify-center gap-6">
+            <AudioEl stream={remoteStream} />
             <Avatar
               firstName={activeCall.partner.first_name}
               lastName={activeCall.partner.last_name}
