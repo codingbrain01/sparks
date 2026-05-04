@@ -201,6 +201,23 @@ const buckets = await q(`
 `)
 push('Storage buckets', buckets.length ? buckets.map((r) => r.ddl).join('\n') + '\n' : '-- (none)\n')
 
+console.log('Fetching storage policies…')
+const storagePolicies = await q(`
+  select format(
+    'CREATE POLICY %I ON storage.objects AS %s FOR %s TO %s%s%s;',
+    policyname,
+    case permissive when 'PERMISSIVE' then 'PERMISSIVE' else 'RESTRICTIVE' end,
+    cmd,
+    array_to_string(roles, ', '),
+    case when qual is not null then ' USING (' || qual || ')' else '' end,
+    case when with_check is not null then ' WITH CHECK (' || with_check || ')' else '' end
+  ) as ddl
+  from pg_policies
+  where schemaname = 'storage' and tablename = 'objects'
+  order by cmd, policyname
+`)
+push('Storage policies (storage.objects)', storagePolicies.length ? storagePolicies.map((r) => r.ddl).join('\n') + '\n' : '-- (none)\n')
+
 const header = `-- Sparks Supabase remote schema dump
 -- Project: ${REF}
 -- Generated: ${new Date().toISOString()}

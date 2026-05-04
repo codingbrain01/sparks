@@ -1,6 +1,6 @@
 -- Sparks Supabase remote schema dump
 -- Project: ejswfqjgfepizehzrsqr
--- Generated: 2026-05-04T06:21:22.505Z
+-- Generated: 2026-05-04T10:01:22.667Z
 -- Source: Supabase Management API (no DB password used)
 -- Note: Schemas auth/storage/realtime managed by Supabase are not included.
 --       Run blocks in order. Idempotency is best-effort.
@@ -352,3 +352,21 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.posts;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('avatars', 'avatars', 'true', NULL, NULL) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('chat-images', 'chat-images', 'true', '26214400', NULL) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('gallery', 'gallery', 'true', '26214400', NULL) ON CONFLICT (id) DO NOTHING;
+
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Storage policies (storage.objects)
+-- ──────────────────────────────────────────────────────────────────────
+
+CREATE POLICY "Participants can delete chat images" ON storage.objects AS PERMISSIVE FOR DELETE TO authenticated USING (((bucket_id = 'chat-images'::text) AND ((storage.foldername(name))[1] IN ( SELECT (conversation_participants.conversation_id)::text AS conversation_id
+   FROM conversation_participants
+  WHERE (conversation_participants.user_id = auth.uid())))));
+CREATE POLICY "Users can delete own avatar" ON storage.objects AS PERMISSIVE FOR DELETE TO authenticated USING (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
+CREATE POLICY "Users can delete own gallery files" ON storage.objects AS PERMISSIVE FOR DELETE TO public USING (((bucket_id = 'gallery'::text) AND ((auth.uid())::text = (storage.foldername(name))[1])));
+CREATE POLICY "Auth users can upload to gallery" ON storage.objects AS PERMISSIVE FOR INSERT TO public WITH CHECK (((bucket_id = 'gallery'::text) AND (auth.role() = 'authenticated'::text)));
+CREATE POLICY "Authenticated users can upload chat images" ON storage.objects AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((bucket_id = 'chat-images'::text));
+CREATE POLICY "Users can upload own avatar" ON storage.objects AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
+CREATE POLICY "Anyone can view gallery" ON storage.objects AS PERMISSIVE FOR SELECT TO public USING ((bucket_id = 'gallery'::text));
+CREATE POLICY "Public read access" ON storage.objects AS PERMISSIVE FOR SELECT TO public USING ((bucket_id = 'avatars'::text));
+CREATE POLICY "Public read for chat images" ON storage.objects AS PERMISSIVE FOR SELECT TO public USING ((bucket_id = 'chat-images'::text));
+CREATE POLICY "Users can update own avatar" ON storage.objects AS PERMISSIVE FOR UPDATE TO authenticated USING (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
