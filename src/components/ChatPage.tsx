@@ -85,6 +85,24 @@ function AudioPlayer({ src, isSender }: { src: string; isSender: boolean }) {
 
 // CallOverlay is rendered globally via App.tsx / CallProvider
 
+// Placeholder partner used when the other side of a conversation deleted
+// their account. Also rendered for any message with sender_id === null.
+const DELETED_PARTNER: Profile = {
+  id: 'deleted',
+  username: 'deleted',
+  first_name: 'Deleted',
+  last_name: 'user',
+  age: 0,
+  looking_for: 'Women',
+  bio: null,
+  hobbies: null,
+  avatar_url: null,
+  gender: 'Man',
+  online: false,
+  status: 'invisible',
+  created_at: '',
+}
+
 // ─── Main component ────────────────────────────────────────────────────────
 export default function ChatPage() {
   const location = useLocation()
@@ -216,6 +234,20 @@ export default function ChatPage() {
         unread_count: 0,
       }
     })
+    // Conversations with no other participant — partner deleted their account.
+    // Show with a placeholder profile so B keeps history visibility.
+    for (const cid of convIds) {
+      if (convMap[cid]) continue
+      const last = lastMessages?.find((m) => m.conversation_id === cid)
+      convMap[cid] = {
+        id: cid,
+        updated_at: last?.created_at ?? '',
+        partner: DELETED_PARTNER,
+        partnerDeleted: true,
+        last_message: 'This user is unavailable',
+        unread_count: 0,
+      }
+    }
 
     setConversations(
       Object.values(convMap).sort(
@@ -611,7 +643,11 @@ export default function ChatPage() {
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <h3 className="text-base font-bold text-gray-900 mb-1">Delete conversation</h3>
             <p className="text-sm text-gray-500 mb-5">
-              Chat with <span className="font-semibold text-gray-700">{deleteConv.partner.first_name} {deleteConv.partner.last_name}</span>
+              Chat with <span className="font-semibold text-gray-700">
+                {deleteConv.partnerDeleted
+                  ? 'Deleted user'
+                  : `${deleteConv.partner.first_name} ${deleteConv.partner.last_name}`}
+              </span>
             </p>
             <div className="space-y-2.5">
               <button
@@ -816,11 +852,13 @@ export default function ChatPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
-                        <span className="font-semibold text-gray-900 text-sm">
-                          {conv.partner.first_name} {conv.partner.last_name}
+                        <span className={`font-semibold text-sm ${conv.partnerDeleted ? 'text-gray-400 italic' : 'text-gray-900'}`}>
+                          {conv.partnerDeleted
+                            ? 'Deleted user'
+                            : `${conv.partner.first_name} ${conv.partner.last_name}`}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-500 truncate">
+                      <p className={`text-sm truncate ${conv.partnerDeleted ? 'text-gray-400 italic' : 'text-gray-500'}`}>
                         {conv.last_message || 'Start a conversation'}
                       </p>
                     </div>
@@ -883,109 +921,131 @@ export default function ChatPage() {
 
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900 text-sm lg:text-base truncate">
-                    {activeConv.partner.first_name} {activeConv.partner.last_name}
+                    {activeConv.partnerDeleted
+                      ? 'Deleted user'
+                      : `${activeConv.partner.first_name} ${activeConv.partner.last_name}`}
                   </p>
-                  <p className={`text-xs ${onlineMap[activeConv.partner.id] ? 'text-green-500' : 'text-gray-400'}`}>
-                    {onlineMap[activeConv.partner.id]
-                      ? STATUS_META[onlineMap[activeConv.partner.id]].label
-                      : 'Offline'}
+                  <p className={`text-xs ${
+                    activeConv.partnerDeleted
+                      ? 'text-gray-400 italic'
+                      : onlineMap[activeConv.partner.id] ? 'text-green-500' : 'text-gray-400'
+                  }`}>
+                    {activeConv.partnerDeleted
+                      ? 'Account deleted'
+                      : onlineMap[activeConv.partner.id]
+                        ? STATUS_META[onlineMap[activeConv.partner.id]].label
+                        : 'Offline'}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => activeConv && startCall(activeConv.id, activeConv.partner, 'audio')}
-                    title="Audio call"
-                    className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center text-green-500 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => activeConv && startCall(activeConv.id, activeConv.partner, 'video')}
-                    title="Video call"
-                    className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-rose-50 hover:bg-rose-100 flex items-center justify-center text-rose-500 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  </button>
-                </div>
+                {!activeConv.partnerDeleted && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => activeConv && startCall(activeConv.id, activeConv.partner, 'audio')}
+                      title="Audio call"
+                      className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center text-green-500 transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => activeConv && startCall(activeConv.id, activeConv.partner, 'video')}
+                      title="Video call"
+                      className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-rose-50 hover:bg-rose-100 flex items-center justify-center text-rose-500 transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4 space-y-3 bg-linear-to-b from-rose-50/30 via-fuchsia-50/20 to-white">
                 {messages.length === 0 && (
                   <div className="text-center text-gray-400 text-sm py-8 select-none">
-                    Say hi to {activeConv.partner.first_name}! 👋
+                    {activeConv.partnerDeleted
+                      ? 'This user is unavailable.'
+                      : `Say hi to ${activeConv.partner.first_name}! 👋`}
                   </div>
                 )}
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
-                    {msg.sender_id !== user?.id && (
-                      <Avatar
-                        firstName={activeConv.partner.first_name}
-                        lastName={activeConv.partner.last_name}
-                        gender={activeConv.partner.gender}
-                        avatarUrl={activeConv.partner.avatar_url}
-                        className="w-7 h-7 rounded-full mr-2 shrink-0 self-end"
-                        textClassName="text-xs font-bold"
-                      />
-                    )}
-                    <div className={`max-w-[72%] lg:max-w-[60%] rounded-2xl overflow-hidden ${
-                      msg.sender_id === user?.id
-                        ? 'bg-linear-to-r from-rose-500 to-pink-400 text-white rounded-br-sm'
-                        : 'bg-white text-gray-800 rounded-bl-sm shadow-sm'
-                    }`}>
-                      {msg.image_url && (
-                        /\.(mp3|ogg|webm|m4a|wav)(\?|$)/i.test(msg.image_url) && msg.image_url.includes('voice-') ? (
-                          <AudioPlayer src={msg.image_url} isSender={msg.sender_id === user?.id} />
-                        ) : /\.(mp4|mov|webm|ogg)(\?|$)/i.test(msg.image_url) ? (
-                          <div
-                            className="relative cursor-pointer group/video"
-                            onClick={() => setViewingVideo(msg.image_url!)}
-                          >
-                            <video
-                              src={msg.image_url}
-                              className="max-w-full block pointer-events-none"
-                              style={{ maxHeight: '300px', width: '100%' }}
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/video:bg-black/30 transition-colors">
-                              <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                                <svg className="w-5 h-5 text-gray-800 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M8 5v14l11-7z" />
-                                </svg>
+                {messages.map((msg) => {
+                  const isMine = msg.sender_id === user?.id
+                  const isFromDeletedUser = msg.sender_id === null
+                  return (
+                    <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      {!isMine && (
+                        <Avatar
+                          firstName={isFromDeletedUser ? 'Deleted' : activeConv.partner.first_name}
+                          lastName={isFromDeletedUser ? 'user' : activeConv.partner.last_name}
+                          gender={isFromDeletedUser ? 'Man' : activeConv.partner.gender}
+                          avatarUrl={isFromDeletedUser ? null : activeConv.partner.avatar_url}
+                          className="w-7 h-7 rounded-full mr-2 shrink-0 self-end opacity-60"
+                          textClassName="text-xs font-bold"
+                        />
+                      )}
+                      <div className={`max-w-[72%] lg:max-w-[60%] rounded-2xl overflow-hidden ${
+                        isMine
+                          ? 'bg-linear-to-r from-rose-500 to-pink-400 text-white rounded-br-sm'
+                          : isFromDeletedUser
+                            ? 'bg-gray-100 text-gray-400 rounded-bl-sm shadow-sm italic'
+                            : 'bg-white text-gray-800 rounded-bl-sm shadow-sm'
+                      }`}>
+                        {!isFromDeletedUser && msg.image_url && (
+                          /\.(mp3|ogg|webm|m4a|wav)(\?|$)/i.test(msg.image_url) && msg.image_url.includes('voice-') ? (
+                            <AudioPlayer src={msg.image_url} isSender={isMine} />
+                          ) : /\.(mp4|mov|webm|ogg)(\?|$)/i.test(msg.image_url) ? (
+                            <div
+                              className="relative cursor-pointer group/video"
+                              onClick={() => setViewingVideo(msg.image_url!)}
+                            >
+                              <video
+                                src={msg.image_url}
+                                className="max-w-full block pointer-events-none"
+                                style={{ maxHeight: '300px', width: '100%' }}
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/video:bg-black/30 transition-colors">
+                                <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                  <svg className="w-5 h-5 text-gray-800 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z" />
+                                  </svg>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ) : (
-                          <img
-                            src={msg.image_url}
-                            alt="Shared image"
-                            className="max-w-full block cursor-pointer"
-                            style={{ maxHeight: '300px', objectFit: 'cover', width: '100%' }}
-                            onClick={() => setViewingImage(msg.image_url!)}
-                          />
-                        )
-                      )}
-                      <div className="px-4 py-2.5">
-                        {msg.content && <p className="text-sm leading-relaxed">{msg.content}</p>}
-                        <div className={`flex items-center gap-1 ${msg.content ? 'mt-1' : ''} ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
-                          <p className={`text-xs ${msg.sender_id === user?.id ? 'text-rose-100' : 'text-gray-400'}`}>
-                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                          {msg.sender_id === user?.id && (
-                            <span className="flex items-center -space-x-1">
-                              <span className={`text-xs leading-none ${msg.read_at ? 'text-white' : 'text-rose-300'}`}>✓</span>
-                              {msg.read_at && <span className="text-xs leading-none text-white">✓</span>}
-                            </span>
+                          ) : (
+                            <img
+                              src={msg.image_url}
+                              alt="Shared image"
+                              className="max-w-full block cursor-pointer"
+                              style={{ maxHeight: '300px', objectFit: 'cover', width: '100%' }}
+                              onClick={() => setViewingImage(msg.image_url!)}
+                            />
+                          )
+                        )}
+                        <div className="px-4 py-2.5">
+                          {isFromDeletedUser ? (
+                            <p className="text-sm leading-relaxed">This user is unavailable</p>
+                          ) : (
+                            msg.content && <p className="text-sm leading-relaxed">{msg.content}</p>
                           )}
+                          <div className={`flex items-center gap-1 ${(msg.content || isFromDeletedUser) ? 'mt-1' : ''} ${isMine ? 'justify-end' : 'justify-start'}`}>
+                            <p className={`text-xs ${isMine ? 'text-rose-100' : 'text-gray-400'}`}>
+                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            {isMine && (
+                              <span className="flex items-center -space-x-1">
+                                <span className={`text-xs leading-none ${msg.read_at ? 'text-white' : 'text-rose-300'}`}>✓</span>
+                                {msg.read_at && <span className="text-xs leading-none text-white">✓</span>}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 {/* Typing indicator */}
                 {partnerTyping && (
                   <div className="flex justify-start items-end gap-2">
@@ -1019,7 +1079,14 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {/* Message input */}
+              {/* Message input — hidden when partner deleted their account */}
+              {activeConv.partnerDeleted ? (
+                <div className="shrink-0 bg-gray-50 border-t border-gray-100 px-4 lg:px-6 py-4 text-center">
+                  <p className="text-sm text-gray-400 italic">
+                    You can no longer send messages to this conversation.
+                  </p>
+                </div>
+              ) : (
               <div className="shrink-0 bg-white border-t border-gray-100 px-4 lg:px-6 py-3">
                 <div className="flex items-center gap-2 max-w-3xl mx-auto">
                   {/* Hidden file input */}
@@ -1119,6 +1186,7 @@ export default function ChatPage() {
                   )}
                 </div>
               </div>
+              )}
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-gray-50">

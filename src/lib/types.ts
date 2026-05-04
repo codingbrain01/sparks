@@ -66,7 +66,8 @@ export interface ProfilePhoto {
 export interface Message {
   id: number
   conversation_id: number
-  sender_id: string
+  /** null when the sender deleted their account — render as "user unavailable" */
+  sender_id: string | null
   content: string
   created_at: string
   read_at: string | null
@@ -77,6 +78,8 @@ export interface ConversationWithPartner {
   id: number
   updated_at: string
   partner: Profile
+  /** true when the partner deleted their account — partner is a placeholder */
+  partnerDeleted?: boolean
   last_message: string
   unread_count: number
 }

@@ -1,6 +1,6 @@
 -- Sparks Supabase remote schema dump
 -- Project: ejswfqjgfepizehzrsqr
--- Generated: 2026-04-27T16:46:52.347Z
+-- Generated: 2026-05-04T06:21:22.505Z
 -- Source: Supabase Management API (no DB password used)
 -- Note: Schemas auth/storage/realtime managed by Supabase are not included.
 --       Run blocks in order. Idempotency is best-effort.
@@ -72,7 +72,7 @@ CREATE TABLE public.conversations (
 CREATE TABLE public.messages (
   id bigint DEFAULT nextval('messages_id_seq'::regclass) NOT NULL,
   conversation_id bigint NOT NULL,
-  sender_id uuid NOT NULL,
+  sender_id uuid,
   content text NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   read_at timestamp with time zone,
@@ -158,7 +158,7 @@ ALTER TABLE public.connections ADD CONSTRAINT connections_requester_id_fkey FORE
 ALTER TABLE public.conversation_participants ADD CONSTRAINT conversation_participants_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
 ALTER TABLE public.conversation_participants ADD CONSTRAINT conversation_participants_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
 ALTER TABLE public.messages ADD CONSTRAINT messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
-ALTER TABLE public.messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES profiles(id) ON DELETE SET NULL;
 ALTER TABLE public.post_comments ADD CONSTRAINT post_comments_post_id_fkey FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
 ALTER TABLE public.post_comments ADD CONSTRAINT post_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
 ALTER TABLE public.post_likes ADD CONSTRAINT post_likes_post_id_fkey FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
@@ -192,22 +192,32 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  -- Chat images live under <conversation_id>/… so wipe files for every
-  -- conversation this user took part in before the cascade drops the rows.
+  -- 1. Delete only the user's own chat-image uploads (matched by sender_id
+  --    via the public URL embedded in messages.image_url).
   DELETE FROM storage.objects
   WHERE bucket_id = 'chat-images'
-    AND (storage.foldername(name))[1] IN (
-      SELECT conversation_id::text
-      FROM public.conversation_participants
-      WHERE user_id = uid
+    AND name IN (
+      SELECT regexp_replace(image_url, '^.*/chat-images/', '')
+      FROM public.messages
+      WHERE sender_id = uid AND image_url IS NOT NULL
     );
 
-  -- Avatars and gallery files live under <user_id>/…
+  -- 2. Delete avatars + gallery (per-user folder layout).
   DELETE FROM storage.objects
   WHERE bucket_id IN ('avatars', 'gallery')
     AND (storage.foldername(name))[1] = uid::text;
 
-  -- Cascades through profiles → posts, messages, connections, calls, etc.
+  -- 3. Wipe content of the user's messages so only an "unavailable user"
+  --    placeholder remains for the other party. sender_id will go NULL
+  --    automatically when profiles row is deleted (FK ON DELETE SET NULL).
+  UPDATE public.messages
+  SET content = '', image_url = NULL
+  WHERE sender_id = uid;
+
+  -- 4. Drop the auth user. Cascades through profiles → posts, post_likes,
+  --    post_comments, profile_photos, connections, calls,
+  --    conversation_participants. messages.sender_id becomes NULL via
+  --    the FK we just adjusted in step 1.
   DELETE FROM auth.users WHERE id = uid;
 END;
 $function$
