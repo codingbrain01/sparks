@@ -107,10 +107,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }
 
+  const [signingOut, setSigningOut] = useState(false)
+
   const signOut = async () => {
+    setSigningOut(true)
     await supabase.auth.signOut()
+    // Small visual buffer so the transition doesn't feel jarringly instant.
+    await new Promise((r) => setTimeout(r, 600))
     setUser(null)
     setProfile(null)
+    setSigningOut(false)
   }
 
   const refreshProfile = async () => {
@@ -120,6 +126,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, refreshProfile }}>
       {children}
+      {signingOut && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin" />
+            <p className="text-base font-medium text-gray-700">Logging out…</p>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   )
 }
