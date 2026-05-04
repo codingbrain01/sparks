@@ -1,6 +1,6 @@
 -- Sparks Supabase remote schema dump
 -- Project: ejswfqjgfepizehzrsqr
--- Generated: 2026-05-04T10:01:22.667Z
+-- Generated: 2026-05-04T10:26:53.946Z
 -- Source: Supabase Management API (no DB password used)
 -- Note: Schemas auth/storage/realtime managed by Supabase are not included.
 --       Run blocks in order. Idempotency is best-effort.
@@ -312,6 +312,11 @@ CREATE POLICY "Users can view their conversations" ON public.conversations AS PE
 CREATE POLICY "Participants can send messages" ON public.messages AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((auth.uid() = sender_id) AND (conversation_id IN ( SELECT conversation_participants.conversation_id
    FROM conversation_participants
   WHERE (conversation_participants.user_id = auth.uid())))));
+CREATE POLICY "Participants can update messages" ON public.messages AS PERMISSIVE FOR UPDATE TO authenticated USING ((conversation_id IN ( SELECT conversation_participants.conversation_id
+   FROM conversation_participants
+  WHERE (conversation_participants.user_id = auth.uid())))) WITH CHECK ((conversation_id IN ( SELECT conversation_participants.conversation_id
+   FROM conversation_participants
+  WHERE (conversation_participants.user_id = auth.uid()))));
 CREATE POLICY "Participants can view messages" ON public.messages AS PERMISSIVE FOR SELECT TO authenticated USING ((conversation_id IN ( SELECT conversation_participants.conversation_id
    FROM conversation_participants
   WHERE (conversation_participants.user_id = auth.uid()))));
