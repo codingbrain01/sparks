@@ -185,8 +185,30 @@ CREATE OR REPLACE FUNCTION public.delete_own_account()
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
+DECLARE
+  uid uuid := auth.uid();
 BEGIN
-  DELETE FROM auth.users WHERE id = auth.uid();
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- Chat images live under <conversation_id>/… so wipe files for every
+  -- conversation this user took part in before the cascade drops the rows.
+  DELETE FROM storage.objects
+  WHERE bucket_id = 'chat-images'
+    AND (storage.foldername(name))[1] IN (
+      SELECT conversation_id::text
+      FROM public.conversation_participants
+      WHERE user_id = uid
+    );
+
+  -- Avatars and gallery files live under <user_id>/…
+  DELETE FROM storage.objects
+  WHERE bucket_id IN ('avatars', 'gallery')
+    AND (storage.foldername(name))[1] = uid::text;
+
+  -- Cascades through profiles → posts, messages, connections, calls, etc.
+  DELETE FROM auth.users WHERE id = uid;
 END;
 $function$
 ;
