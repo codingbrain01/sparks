@@ -1,6 +1,6 @@
 -- Sparks Supabase remote schema dump
 -- Project: ejswfqjgfepizehzrsqr
--- Generated: 2026-05-04T10:26:53.946Z
+-- Generated: 2026-05-04T10:51:17.126Z
 -- Source: Supabase Management API (no DB password used)
 -- Note: Schemas auth/storage/realtime managed by Supabase are not included.
 --       Run blocks in order. Idempotency is best-effort.
@@ -192,6 +192,10 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
+  -- Bypass Supabase's storage.protect_delete trigger for this transaction.
+  -- Required because we delete storage.objects rows directly below.
+  PERFORM set_config('storage.allow_delete_query', 'true', true);
+
   -- 1. Delete only the user's own chat-image uploads (matched by sender_id
   --    via the public URL embedded in messages.image_url).
   DELETE FROM storage.objects
@@ -217,7 +221,7 @@ BEGIN
   -- 4. Drop the auth user. Cascades through profiles → posts, post_likes,
   --    post_comments, profile_photos, connections, calls,
   --    conversation_participants. messages.sender_id becomes NULL via
-  --    the FK we just adjusted in step 1.
+  --    the FK ON DELETE SET NULL.
   DELETE FROM auth.users WHERE id = uid;
 END;
 $function$

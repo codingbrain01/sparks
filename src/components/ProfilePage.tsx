@@ -84,9 +84,17 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
 
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null)
+
   const deleteAccount = async () => {
     setDeletingAccount(true)
-    await supabase.rpc('delete_own_account')
+    setDeleteAccountError(null)
+    const { error } = await supabase.rpc('delete_own_account')
+    if (error) {
+      setDeleteAccountError(error.message)
+      setDeletingAccount(false)
+      return
+    }
     signOut()
   }
 
@@ -1016,6 +1024,11 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
           <p className="text-sm text-gray-500 text-center mb-6">
             This will permanently delete your profile, posts, connections, and messages. <span className="font-semibold text-gray-700">There is no going back.</span>
           </p>
+          {deleteAccountError && (
+            <div className="mb-4 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+              {deleteAccountError}
+            </div>
+          )}
           <div className="space-y-2.5">
             <button
               onClick={deleteAccount}
