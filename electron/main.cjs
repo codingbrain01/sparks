@@ -1,6 +1,7 @@
 'use strict'
 
 const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 
 // Detect dev mode — true when NOT packaged (i.e. running via `electron .`)
@@ -77,6 +78,14 @@ app.whenReady().then(() => {
   app.commandLine.appendSwitch('touch-events', 'enabled')
 
   createWindow()
+
+  // Auto-update from GitHub Releases. Skipped in dev (no installer to update).
+  // electron-updater pulls the feed from package.json's `build.publish` config,
+  // checks on launch, downloads in background, and shows a native notification
+  // prompting the user to restart when an update is ready.
+  if (!isDev) {
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {})
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
