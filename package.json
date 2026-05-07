@@ -5,7 +5,7 @@
   "author": "codingbrain01",
   "main": "electron/main.cjs",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,6 +32,7 @@
       "owner": "codingbrain01",
       "repo": "sparks"
     },
+    "artifactName": "${productName}-Setup.${ext}",
     "win": {
       "icon": "public/app-icon.ico",
       "target": [
