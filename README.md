@@ -188,14 +188,62 @@ Sign up with any email + password, complete the 3-step onboarding, and you're in
 ## Build
 
 ```bash
-# Web bundle (output: dist/)
+# Web bundle for Vercel/static hosting (output: dist/, absolute /assets paths)
 npm run build
+
+# Web bundle for Electron (output: dist/, relative ./assets paths needed for file://)
+npm run build -- --mode electron
 
 # Desktop installer (output: release/)
 npm run electron:build
 ```
 
-> **Web production note:** configure your server to redirect all routes to `index.html` (e.g. Netlify `_redirects`, Vercel rewrites) for client-side routing to work on refresh.
+The Vite config switches `base` between `/` (default, web) and `./` (electron mode) so the same codebase works in both contexts. SPA fallback for static hosts is wired up in [vercel.json](vercel.json).
+
+---
+
+## Deployment
+
+Sparks ships through two channels from the same codebase.
+
+| Channel | URL pattern | Trigger |
+|---|---|---|
+| **Web app** | https://sparksappofficial.vercel.app/ (or your Vercel domain) | Auto-deploys on every push to `main` |
+| **Desktop installer** | https://github.com/codingbrain01/sparks/releases/latest/download/Sparks-Setup.exe | Manual: `npm run release` |
+| **Desktop auto-update** | (electron-updater inside installed app) | Automatic after a new GitHub Release is published |
+
+### What `git push` does on its own
+
+- Vercel watches `main`, builds the web bundle, and replaces the live site in ~30s.
+- Installed desktop copies are **not** affected. They follow GitHub Releases.
+
+### Shipping a new desktop version
+
+```powershell
+# Make sure GH_TOKEN is in your Windows User env (one-time setup):
+#   [Environment]::SetEnvironmentVariable("GH_TOKEN", "ghp_...", "User")
+
+# Bump the version in package.json, then:
+npm run release
+```
+
+`npm run release` builds the installer, signs it, uploads it to GitHub as a **draft**. To finish the release so installed copies can auto-update, either:
+
+- Open https://github.com/codingbrain01/sparks/releases, find the draft, and click **Publish**, or
+- PATCH the draft via the API (see commit history for examples — sets `draft: false` and `tag_name: v<version>`).
+
+Every existing installed copy will pick the new version up on next launch via electron-updater and prompt the user to restart.
+
+### Required Vercel project setup
+
+If you're forking or cloning to host your own copy:
+
+1. Import the repo into a new Vercel project — Vercel auto-detects the build from [vercel.json](vercel.json).
+2. Add env vars in **Settings → Environment Variables** (apply to Production, Preview, Development):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+3. Trigger a redeploy **without** build cache so the env vars get baked into the bundle.
+4. In Supabase **Authentication → URL Configuration**, add your Vercel domain to **Site URL** and **Redirect URLs** so email confirmation and password reset links work.
 
 ---
 
