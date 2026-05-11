@@ -142,9 +142,10 @@ Without TURN, calls work for users on the same network or with friendly NATs but
 
 1. Sign up at https://metered.ca (free tier includes 50GB/month, plenty for testing).
 2. **Apps → Create New App → TURN Server**. Give it a slug like `sparks-turn`.
-3. After creating, you'll see two values you need:
-   - **API Key** (looks like `abc123...`)
-   - **App Name** (the slug — `sparks-turn` in this example)
+3. Store those values as Supabase Edge Function secrets:
+   - `METERED_API_KEY`
+   - `METERED_APP_NAME` (the app slug)
+4. Deploy `supabase/functions/turn-credentials`.
 
 If you skip this, the app falls back to Google's public STUN servers and most calls will still connect, but strict-NAT users won't.
 
@@ -168,8 +169,7 @@ Open `.env` and fill in:
 
 - `VITE_SUPABASE_URL` — from **Project Settings → API → Project URL**
 - `VITE_SUPABASE_ANON_KEY` — from **Project Settings → API → anon public** (not the service_role key)
-- `VITE_METERED_API_KEY` — from your Metered dashboard (skip if you skipped step 6)
-- `VITE_METERED_APP_NAME` — the slug from step 6 (skip if you skipped step 6)
+TURN credentials are intentionally not stored in `.env`; keep them in Supabase function secrets.
 
 ### Step 9 — Run it
 

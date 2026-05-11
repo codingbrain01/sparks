@@ -72,7 +72,7 @@ export default function Sidebar() {
         </h1>
         {window.location.protocol === 'file:' && (
           <button
-            onClick={() => (window as any).electronAPI?.closeApp()}
+            onClick={() => window.electronAPI?.closeApp()}
             title="Exit app"
             className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-colors shrink-0"
           >

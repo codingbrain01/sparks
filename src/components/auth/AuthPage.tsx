@@ -64,7 +64,7 @@ export default function AuthPage() {
         <div className="bg-linear-to-r from-rose-500 to-pink-400 px-6 sm:px-8 pt-10 sm:pt-8 pb-6 text-center relative">
           {window.location.protocol === 'file:' && (
             <button
-              onClick={() => (window as any).electronAPI?.closeApp()}
+              onClick={() => window.electronAPI?.closeApp()}
               title="Exit app"
               className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
             >

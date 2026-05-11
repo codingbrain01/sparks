@@ -566,7 +566,9 @@ export default function HomePage({ onStartChat }: { onStartChat?: (profile: Prof
           connStatus={connectionsMap[viewingProfile.id] ?? 'none'}
           onConnect={() => handleConnect(viewingProfile.id)}
           onClose={() => setViewingProfile(null)}
-          onMessage={onStartChat ? () => { onStartChat(viewingProfile); setViewingProfile(null) } : undefined}
+          onMessage={onStartChat && connectionsMap[viewingProfile.id] === 'accepted'
+            ? () => { onStartChat(viewingProfile); setViewingProfile(null) }
+            : undefined}
         />
       )}
 

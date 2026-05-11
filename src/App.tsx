@@ -90,7 +90,7 @@ function AppShell() {
       {/* Exit button — mobile only, Electron packaged only */}
       {window.location.protocol === 'file:' && (
         <button
-          onClick={() => (window as any).electronAPI?.closeApp()}
+          onClick={() => window.electronAPI?.closeApp()}
           title="Exit app"
           className="md:hidden fixed top-3 right-3 z-50 w-9 h-9 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white shadow-md transition-colors"
         >

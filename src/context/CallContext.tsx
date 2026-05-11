@@ -53,16 +53,15 @@ export function useCall() {
 }
 
 async function getIceServers(): Promise<RTCIceServer[]> {
-  const apiKey = import.meta.env.VITE_METERED_API_KEY
-  const appName = import.meta.env.VITE_METERED_APP_NAME
-  if (apiKey && appName) {
-    try {
-      const res = await fetch(
-        `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
-      )
-      if (res.ok) return await res.json()
-    } catch {}
+  try {
+    const { data, error } = await supabase.functions.invoke<{ iceServers: RTCIceServer[] }>('turn-credentials')
+    if (!error && Array.isArray(data?.iceServers) && data.iceServers.length > 0) {
+      return data.iceServers
+    }
+  } catch {
+    // Fall through to public STUN servers when the edge function is unavailable.
   }
+
   return [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },

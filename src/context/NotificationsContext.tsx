@@ -11,6 +11,13 @@ export interface ConnectionRequest {
   profiles: Profile
 }
 
+interface ConnectionRequestRow {
+  id: number
+  requester_id: string
+  created_at: string
+  profiles: Profile | Profile[] | null
+}
+
 interface NotificationsContextType {
   requests: ConnectionRequest[]
   count: number
@@ -32,10 +39,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       .select('id, requester_id, created_at, profiles!requester_id(*)')
       .eq('addressee_id', user.id)
       .eq('status', 'pending')
-    const normalized: ConnectionRequest[] = (data ?? []).map((row: any) => ({
+    const normalized: ConnectionRequest[] = ((data ?? []) as ConnectionRequestRow[]).map((row) => ({
       ...row,
       profiles: Array.isArray(row.profiles) ? row.profiles[0] : row.profiles,
-    }))
+    })).filter((row): row is ConnectionRequest => Boolean(row.profiles))
     setRequests(normalized)
   }
 

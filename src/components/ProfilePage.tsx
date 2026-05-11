@@ -43,6 +43,14 @@ interface Draft {
   hobbies: string[]
 }
 
+interface ProfileJoinRow {
+  profiles: Profile | Profile[] | null
+}
+
+function joinedProfile(row: ProfileJoinRow) {
+  return Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+}
+
 export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: Profile) => void }) {
   const { profile, refreshProfile, signOut } = useAuth()
   const [editing, setEditing] = useState(false)
@@ -188,8 +196,8 @@ export default function ProfilePage({ onStartChat }: { onStartChat?: (profile: P
         supabase.from('connections').select('profiles!requester_id(*)').eq('addressee_id', profile.id).eq('status', 'accepted'),
       ])
       const profiles = [
-        ...((sent ?? []).map((r: any) => r.profiles)),
-        ...((received ?? []).map((r: any) => r.profiles)),
+        ...((sent ?? []) as ProfileJoinRow[]).map(joinedProfile),
+        ...((received ?? []) as ProfileJoinRow[]).map(joinedProfile),
       ].filter(Boolean) as Profile[]
       setConnections(profiles)
     }

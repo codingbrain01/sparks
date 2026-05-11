@@ -109,7 +109,13 @@ export default function CallOverlay() {
     return () => {
       stopped = true
       clearTimeout(timer)
-      oscillators.forEach((o) => { try { o.stop() } catch {} })
+      oscillators.forEach((o) => {
+        try {
+          o.stop()
+        } catch {
+          // Oscillator may already have stopped naturally.
+        }
+      })
       ctx.close().catch(() => {})
     }
   }, [incomingCall, outgoingCall, activeCall])

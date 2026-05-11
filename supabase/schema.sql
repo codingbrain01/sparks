@@ -1,6 +1,6 @@
 -- Sparks Supabase remote schema dump
 -- Project: ejswfqjgfepizehzrsqr
--- Generated: 2026-05-04T10:51:17.126Z
+-- Generated: 2026-05-11T14:26:19.196Z
 -- Source: Supabase Management API (no DB password used)
 -- Note: Schemas auth/storage/realtime managed by Supabase are not included.
 --       Run blocks in order. Idempotency is best-effort.
@@ -179,6 +179,24 @@ ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REF
 -- Functions / procedures
 -- ──────────────────────────────────────────────────────────────────────
 
+CREATE OR REPLACE FUNCTION public.can_access_chat_media(object_name text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  folder text := (storage.foldername(object_name))[1];
+BEGIN
+  IF folder IS NULL OR folder !~ '^[0-9]+$' THEN
+    RETURN false;
+  END IF;
+
+  RETURN public.is_conversation_participant(folder::bigint);
+END;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.delete_own_account()
  RETURNS void
  LANGUAGE plpgsql
@@ -253,6 +271,141 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.hide_conversation(conv_id bigint)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  uid uuid := auth.uid();
+BEGIN
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  UPDATE public.conversation_participants
+  SET hidden = true
+  WHERE conversation_id = conv_id
+    AND user_id = uid;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Not a conversation participant';
+  END IF;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.is_conversation_participant(conv_id bigint)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.conversation_participants
+    WHERE conversation_id = conv_id
+      AND user_id = auth.uid()
+  );
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.mark_conversation_read(conv_id bigint)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  uid uuid := auth.uid();
+BEGIN
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.conversation_participants
+    WHERE conversation_id = conv_id
+      AND user_id = uid
+  ) THEN
+    RAISE EXCEPTION 'Not a conversation participant';
+  END IF;
+
+  UPDATE public.messages
+  SET read_at = COALESCE(read_at, now())
+  WHERE conversation_id = conv_id
+    AND sender_id IS DISTINCT FROM uid
+    AND read_at IS NULL;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.start_conversation(partner_id uuid)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  uid uuid := auth.uid();
+  existing_id bigint;
+  new_id bigint;
+BEGIN
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF partner_id IS NULL OR partner_id = uid THEN
+    RAISE EXCEPTION 'Invalid conversation partner';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = partner_id) THEN
+    RAISE EXCEPTION 'Conversation partner not found';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.connections
+    WHERE status = 'accepted'
+      AND (
+        (requester_id = uid AND addressee_id = partner_id) OR
+        (requester_id = partner_id AND addressee_id = uid)
+      )
+  ) THEN
+    RAISE EXCEPTION 'You must be connected before starting a conversation';
+  END IF;
+
+  SELECT cp1.conversation_id
+    INTO existing_id
+  FROM public.conversation_participants cp1
+  JOIN public.conversation_participants cp2
+    ON cp2.conversation_id = cp1.conversation_id
+  WHERE cp1.user_id = uid
+    AND cp2.user_id = partner_id
+  ORDER BY cp1.conversation_id
+  LIMIT 1;
+
+  IF existing_id IS NOT NULL THEN
+    UPDATE public.conversation_participants
+    SET hidden = false
+    WHERE conversation_id = existing_id
+      AND user_id = uid;
+    RETURN existing_id;
+  END IF;
+
+  INSERT INTO public.conversations DEFAULT VALUES
+  RETURNING id INTO new_id;
+
+  INSERT INTO public.conversation_participants (conversation_id, user_id)
+  VALUES (new_id, uid), (new_id, partner_id);
+
+  RETURN new_id;
+END;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.update_conversation_timestamp()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -294,36 +447,18 @@ ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profile_photos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Caller can insert" ON public.calls AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.uid() = caller_id));
+CREATE POLICY "Call participants can insert" ON public.calls AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((auth.uid() = caller_id) OR (auth.uid() = callee_id)));
 CREATE POLICY "Participants can update" ON public.calls AS PERMISSIVE FOR UPDATE TO public USING (((auth.uid() = caller_id) OR (auth.uid() = callee_id)));
 CREATE POLICY "Participants can view their calls" ON public.calls AS PERMISSIVE FOR SELECT TO public USING (((auth.uid() = caller_id) OR (auth.uid() = callee_id)));
 CREATE POLICY "Users can delete connections" ON public.connections AS PERMISSIVE FOR DELETE TO authenticated USING (((auth.uid() = requester_id) OR (auth.uid() = addressee_id)));
 CREATE POLICY "Users can send connection requests" ON public.connections AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = requester_id));
 CREATE POLICY "Users can update connection status" ON public.connections AS PERMISSIVE FOR UPDATE TO authenticated USING ((auth.uid() = addressee_id));
 CREATE POLICY "Users can view their connections" ON public.connections AS PERMISSIVE FOR SELECT TO authenticated USING (((auth.uid() = requester_id) OR (auth.uid() = addressee_id)));
-CREATE POLICY "Participants viewable by authenticated users" ON public.conversation_participants AS PERMISSIVE FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Users can add conversation participants" ON public.conversation_participants AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Users can join conversations" ON public.conversation_participants AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Users can update own participant row" ON public.conversation_participants AS PERMISSIVE FOR UPDATE TO public USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
-CREATE POLICY "Authenticated users can create conversations" ON public.conversations AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Participants can delete conversations" ON public.conversations AS PERMISSIVE FOR DELETE TO public USING ((id IN ( SELECT conversation_participants.conversation_id
-   FROM conversation_participants
-  WHERE (conversation_participants.user_id = auth.uid()))));
-CREATE POLICY "Participants can view their conversations" ON public.conversations AS PERMISSIVE FOR SELECT TO authenticated USING ((id IN ( SELECT conversation_participants.conversation_id
-   FROM conversation_participants
-  WHERE (conversation_participants.user_id = auth.uid()))));
-CREATE POLICY "Users can view their conversations" ON public.conversations AS PERMISSIVE FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Participants can send messages" ON public.messages AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((auth.uid() = sender_id) AND (conversation_id IN ( SELECT conversation_participants.conversation_id
-   FROM conversation_participants
-  WHERE (conversation_participants.user_id = auth.uid())))));
-CREATE POLICY "Participants can update messages" ON public.messages AS PERMISSIVE FOR UPDATE TO authenticated USING ((conversation_id IN ( SELECT conversation_participants.conversation_id
-   FROM conversation_participants
-  WHERE (conversation_participants.user_id = auth.uid())))) WITH CHECK ((conversation_id IN ( SELECT conversation_participants.conversation_id
-   FROM conversation_participants
-  WHERE (conversation_participants.user_id = auth.uid()))));
-CREATE POLICY "Participants can view messages" ON public.messages AS PERMISSIVE FOR SELECT TO authenticated USING ((conversation_id IN ( SELECT conversation_participants.conversation_id
-   FROM conversation_participants
-  WHERE (conversation_participants.user_id = auth.uid()))));
+CREATE POLICY "Participants can view conversation participants" ON public.conversation_participants AS PERMISSIVE FOR SELECT TO authenticated USING (is_conversation_participant(conversation_id));
+CREATE POLICY "Participants can delete conversations" ON public.conversations AS PERMISSIVE FOR DELETE TO public USING (is_conversation_participant(id));
+CREATE POLICY "Participants can view their conversations" ON public.conversations AS PERMISSIVE FOR SELECT TO authenticated USING (is_conversation_participant(id));
+CREATE POLICY "Participants can send messages" ON public.messages AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((auth.uid() = sender_id) AND is_conversation_participant(conversation_id)));
+CREATE POLICY "Participants can view messages" ON public.messages AS PERMISSIVE FOR SELECT TO authenticated USING (is_conversation_participant(conversation_id));
 CREATE POLICY "Comments viewable by authenticated users" ON public.post_comments AS PERMISSIVE FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Users can create comments" ON public.post_comments AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = user_id));
 CREATE POLICY "Users can delete own comments" ON public.post_comments AS PERMISSIVE FOR DELETE TO authenticated USING ((auth.uid() = user_id));
@@ -359,7 +494,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.posts;
 -- ──────────────────────────────────────────────────────────────────────
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('avatars', 'avatars', 'true', NULL, NULL) ON CONFLICT (id) DO NOTHING;
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('chat-images', 'chat-images', 'true', '26214400', NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('chat-images', 'chat-images', 'false', '26214400', NULL) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('gallery', 'gallery', 'true', '26214400', NULL) ON CONFLICT (id) DO NOTHING;
 
 
@@ -367,15 +502,13 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 -- Storage policies (storage.objects)
 -- ──────────────────────────────────────────────────────────────────────
 
-CREATE POLICY "Participants can delete chat images" ON storage.objects AS PERMISSIVE FOR DELETE TO authenticated USING (((bucket_id = 'chat-images'::text) AND ((storage.foldername(name))[1] IN ( SELECT (conversation_participants.conversation_id)::text AS conversation_id
-   FROM conversation_participants
-  WHERE (conversation_participants.user_id = auth.uid())))));
+CREATE POLICY "Participants can delete chat images" ON storage.objects AS PERMISSIVE FOR DELETE TO authenticated USING (((bucket_id = 'chat-images'::text) AND can_access_chat_media(name)));
 CREATE POLICY "Users can delete own avatar" ON storage.objects AS PERMISSIVE FOR DELETE TO authenticated USING (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
 CREATE POLICY "Users can delete own gallery files" ON storage.objects AS PERMISSIVE FOR DELETE TO public USING (((bucket_id = 'gallery'::text) AND ((auth.uid())::text = (storage.foldername(name))[1])));
 CREATE POLICY "Auth users can upload to gallery" ON storage.objects AS PERMISSIVE FOR INSERT TO public WITH CHECK (((bucket_id = 'gallery'::text) AND (auth.role() = 'authenticated'::text)));
-CREATE POLICY "Authenticated users can upload chat images" ON storage.objects AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((bucket_id = 'chat-images'::text));
+CREATE POLICY "Participants can upload chat images" ON storage.objects AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'chat-images'::text) AND can_access_chat_media(name)));
 CREATE POLICY "Users can upload own avatar" ON storage.objects AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
 CREATE POLICY "Anyone can view gallery" ON storage.objects AS PERMISSIVE FOR SELECT TO public USING ((bucket_id = 'gallery'::text));
+CREATE POLICY "Participants can read chat images" ON storage.objects AS PERMISSIVE FOR SELECT TO authenticated USING (((bucket_id = 'chat-images'::text) AND can_access_chat_media(name)));
 CREATE POLICY "Public read access" ON storage.objects AS PERMISSIVE FOR SELECT TO public USING ((bucket_id = 'avatars'::text));
-CREATE POLICY "Public read for chat images" ON storage.objects AS PERMISSIVE FOR SELECT TO public USING ((bucket_id = 'chat-images'::text));
 CREATE POLICY "Users can update own avatar" ON storage.objects AS PERMISSIVE FOR UPDATE TO authenticated USING (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));

@@ -103,6 +103,27 @@ const DELETED_PARTNER: Profile = {
   created_at: '',
 }
 
+const CHAT_MEDIA_BUCKET = 'chat-images'
+const CHAT_MEDIA_PUBLIC_MARKER = '/object/public/chat-images/'
+
+function isRemoteUrl(value: string) {
+  return /^https?:\/\//i.test(value)
+}
+
+function chatMediaPath(ref: string) {
+  if (!isRemoteUrl(ref)) return ref
+  const idx = ref.indexOf(CHAT_MEDIA_PUBLIC_MARKER)
+  return idx !== -1 ? ref.slice(idx + CHAT_MEDIA_PUBLIC_MARKER.length).split('?')[0] : null
+}
+
+function isVoiceMedia(ref: string) {
+  return /\.(mp3|ogg|webm|m4a|wav)(\?|$)/i.test(ref) && ref.includes('voice-')
+}
+
+function isVideoMedia(ref: string) {
+  return /\.(mp4|mov|webm|ogg)(\?|$)/i.test(ref) && !isVoiceMedia(ref)
+}
+
 // ─── Main component ────────────────────────────────────────────────────────
 export default function ChatPage() {
   const location = useLocation()
@@ -121,6 +142,7 @@ export default function ChatPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [viewingImage, setViewingImage] = useState<string | null>(null)
   const [viewingVideo, setViewingVideo] = useState<string | null>(null)
+  const [mediaUrls, setMediaUrls] = useState<Record<number, string>>({})
   // Voice recording
   const [recording, setRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -141,11 +163,13 @@ export default function ChatPage() {
   const deleteForMe = async () => {
     if (!deleteConv || !user) return
     setDeleting(true)
-    await supabase
-      .from('conversation_participants')
-      .update({ hidden: true })
-      .eq('conversation_id', deleteConv.id)
-      .eq('user_id', user.id)
+    const { error } = await supabase.rpc('hide_conversation', { conv_id: deleteConv.id })
+    if (error) {
+      setUploadError(error.message)
+      setTimeout(() => setUploadError(null), 4000)
+      setDeleting(false)
+      return
+    }
     setConversations((prev) => prev.filter((c) => c.id !== deleteConv.id))
     if (activeConv?.id === deleteConv.id) setActiveConv(null)
     setDeleteConv(null)
@@ -166,16 +190,13 @@ export default function ChatPage() {
     if (imageMessages?.length) {
       const paths = imageMessages
         .map((m) => {
-          // Extract the storage path from the public URL: "{convId}/{filename}"
           const url = m.image_url as string
-          const marker = '/object/public/chat-images/'
-          const idx = url.indexOf(marker)
-          return idx !== -1 ? url.slice(idx + marker.length).split('?')[0] : null
+          return chatMediaPath(url)
         })
         .filter(Boolean) as string[]
 
       if (paths.length) {
-        await supabase.storage.from('chat-images').remove(paths)
+        await supabase.storage.from(CHAT_MEDIA_BUCKET).remove(paths)
       }
     }
 
@@ -270,17 +291,13 @@ export default function ChatPage() {
   // ── Mark partner messages as read ────────────────────────────────────────
   const markMessagesRead = async (convId: number) => {
     if (!user) return
-    await supabase
-      .from('messages')
-      .update({ read_at: new Date().toISOString() })
-      .eq('conversation_id', convId)
-      .neq('sender_id', user.id)
-      .is('read_at', null)
+    await supabase.rpc('mark_conversation_read', { conv_id: convId })
   }
 
   // ── Fetch messages + realtime when conversation changes ──────────────────
   useEffect(() => {
     if (!activeConv) return
+    setMediaUrls({})
 
     supabase
       .from('messages')
@@ -318,6 +335,35 @@ export default function ChatPage() {
 
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current) }
   }, [activeConv])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const signMedia = async () => {
+      const entries = await Promise.all(
+        messages.map(async (msg) => {
+          if (!msg.image_url) return null
+          const path = chatMediaPath(msg.image_url)
+          if (!path) return [msg.id, msg.image_url] as const
+
+          const { data } = await supabase.storage
+            .from(CHAT_MEDIA_BUCKET)
+            .createSignedUrl(path, 60 * 60)
+
+          return data?.signedUrl ? ([msg.id, data.signedUrl] as const) : null
+        })
+      )
+
+      if (!cancelled) {
+        setMediaUrls(Object.fromEntries(
+          entries.filter((entry): entry is readonly [number, string] => Boolean(entry))
+        ))
+      }
+    }
+
+    signMedia()
+    return () => { cancelled = true }
+  }, [messages])
 
   // ── Typing indicator ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -371,15 +417,17 @@ export default function ChatPage() {
     setUploadingImage(true)
     const ext = file.name.split('.').pop() ?? 'bin'
     const path = `${activeConv.id}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('chat-images').upload(path, file, { contentType: file.type })
+    const { error } = await supabase.storage.from(CHAT_MEDIA_BUCKET).upload(path, file, { contentType: file.type })
     if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
       await supabase.from('messages').insert({
         conversation_id: activeConv.id,
         sender_id: user.id,
         content: '',
-        image_url: publicUrl,
+        image_url: path,
       })
+    } else {
+      setUploadError(error.message)
+      setTimeout(() => setUploadError(null), 4000)
     }
     setUploadingImage(false)
   }
@@ -399,15 +447,17 @@ export default function ChatPage() {
         const ext = mimeType.includes('webm') ? 'webm' : 'ogg'
         const path = `${activeConv.id}/voice-${Date.now()}.${ext}`
         setUploadingImage(true)
-        const { error } = await supabase.storage.from('chat-images').upload(path, blob, { contentType: mimeType })
+        const { error } = await supabase.storage.from(CHAT_MEDIA_BUCKET).upload(path, blob, { contentType: mimeType })
         if (!error) {
-          const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
           await supabase.from('messages').insert({
             conversation_id: activeConv.id,
             sender_id: user.id,
             content: '',
-            image_url: publicUrl,
+            image_url: path,
           })
+        } else {
+          setUploadError(error.message)
+          setTimeout(() => setUploadError(null), 4000)
         }
         setUploadingImage(false)
       }
@@ -512,21 +562,17 @@ export default function ChatPage() {
       }
 
       // No existing conversation — create one
-      const { data: conv } = await supabase
-        .from('conversations')
-        .insert({})
-        .select()
-        .single()
+      const { data: convId, error } = await supabase.rpc('start_conversation', { partner_id: partner.id })
+      if (error) {
+        setUploadError(error.message)
+        setTimeout(() => setUploadError(null), 4000)
+        return
+      }
 
-      if (!conv) return
-
-      await supabase.from('conversation_participants').insert([
-        { conversation_id: conv.id, user_id: user.id },
-        { conversation_id: conv.id, user_id: partner.id },
-      ])
+      if (!convId) return
 
       const newConv: ConversationWithPartner = {
-        id: conv.id,
+        id: convId,
         updated_at: new Date().toISOString(),
         partner,
         last_message: '',
@@ -974,6 +1020,8 @@ export default function ChatPage() {
                 {messages.map((msg) => {
                   const isMine = msg.sender_id === user?.id
                   const isFromDeletedUser = msg.sender_id === null
+                  const mediaRef = msg.image_url
+                  const mediaUrl = mediaRef ? mediaUrls[msg.id] : null
                   return (
                     <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       {!isMine && (
@@ -993,16 +1041,16 @@ export default function ChatPage() {
                             ? 'bg-gray-100 text-gray-400 rounded-bl-sm shadow-sm italic'
                             : 'bg-white text-gray-800 rounded-bl-sm shadow-sm'
                       }`}>
-                        {!isFromDeletedUser && msg.image_url && (
-                          /\.(mp3|ogg|webm|m4a|wav)(\?|$)/i.test(msg.image_url) && msg.image_url.includes('voice-') ? (
-                            <AudioPlayer src={msg.image_url} isSender={isMine} />
-                          ) : /\.(mp4|mov|webm|ogg)(\?|$)/i.test(msg.image_url) ? (
+                        {!isFromDeletedUser && mediaRef && mediaUrl && (
+                          isVoiceMedia(mediaRef) ? (
+                            <AudioPlayer src={mediaUrl} isSender={isMine} />
+                          ) : isVideoMedia(mediaRef) ? (
                             <div
                               className="relative cursor-pointer group/video"
-                              onClick={() => setViewingVideo(msg.image_url!)}
+                              onClick={() => setViewingVideo(mediaUrl)}
                             >
                               <video
-                                src={msg.image_url}
+                                src={mediaUrl}
                                 className="max-w-full block pointer-events-none"
                                 style={{ maxHeight: '300px', width: '100%' }}
                               />
@@ -1016,11 +1064,11 @@ export default function ChatPage() {
                             </div>
                           ) : (
                             <img
-                              src={msg.image_url}
+                              src={mediaUrl}
                               alt="Shared image"
                               className="max-w-full block cursor-pointer"
                               style={{ maxHeight: '300px', objectFit: 'cover', width: '100%' }}
-                              onClick={() => setViewingImage(msg.image_url!)}
+                              onClick={() => setViewingImage(mediaUrl)}
                             />
                           )
                         )}
