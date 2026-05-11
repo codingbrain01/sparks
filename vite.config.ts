@@ -2,9 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// https://vite.dev/config/
-export default defineConfig(({ command }) => ({
+// Electron loads bundled files via file:// so it needs relative asset paths.
+// Browser/Vercel deploys need absolute paths so SPA fallback on subroutes
+// (e.g. /profile → /index.html) still resolves /assets/... correctly.
+// Pick the Electron base only when explicitly building with --mode electron.
+export default defineConfig(({ command, mode }) => ({
   plugins: [react(), tailwindcss()],
-  // Use relative paths in production so Electron can load files via file://
-  base: command === 'build' ? './' : '/',
+  base: command === 'build' && mode === 'electron' ? './' : '/',
 }))

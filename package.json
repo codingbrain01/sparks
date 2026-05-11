@@ -5,7 +5,7 @@
   "author": "codingbrain01",
   "main": "electron/main.cjs",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,8 +13,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "tsc -b && vite build && electron-builder",
-    "release": "tsc -b && vite build && electron-builder --publish always"
+    "electron:build": "tsc -b && vite build --mode electron && electron-builder",
+    "release": "tsc -b && vite build --mode electron && electron-builder --publish always"
   },
   "build": {
     "appId": "com.sparks.dating",
